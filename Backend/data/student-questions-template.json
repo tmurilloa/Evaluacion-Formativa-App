@@ -2,91 +2,91 @@
   {
     "number": 1,
     "question": "El profesor es receptivo frente a las inquietudes, creencias y valoraciones de los estudiantes.",
-    "category": "Caracter docente",
+    "category": "Carácter docente",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 2,
     "question": "El profesor mantiene un trato respetuoso y equitativo con los estudiantes.",
-    "category": "Caracter docente",
+    "category": "Carácter docente",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 3,
     "question": "El profesor favorece la inclusión de estudiantes con necesidades de aprendizaje particulares.",
-    "category": "Caracter docente",
+    "category": "Carácter docente",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 4,
     "question": "El profesor motiva mi interés por el aprendizaje y el conocimiento.",
-    "category": "Caracter docente",
+    "category": "Carácter docente",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 5,
     "question": "El profesor muestra disposición para reconocer y mejorar aspectos de su enseñanza.",
-    "category": "Caracter docente",
+    "category": "Carácter docente",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 6,
     "question": "El profesor socializa oportunamente el programa del curso.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 7,
     "question": "El profesor comunica claramente los contenidos que debo aprender.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 8,
     "question": "El profesor emplea diferentes estrategias y recursos didácticos, incluidos recursos tecnológicos, en el desarrollo del curso.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 9,
     "question": "El profesor hace uso adecuado de diferentes ambientes de aprendizaje, como aulas, laboratorios, bibliotecas, auditorios y zonas verdes.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 10,
     "question": "El profesor promueve el trabajo cooperativo entre los estudiantes.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 11,
     "question": "El profesor promueve el desarrollo del pensamiento crítico y la autonomía en el aprendizaje.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 12,
     "question": "El profesor comunica oportunamente los criterios de evaluación.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 13,
     "question": "El profesor comunica oportunamente los resultados de las evaluaciones y las actividades para mejorar los aprendizajes.",
-    "category": "Competencias pedagogicas",
+    "category": "Competencias pedagógicas",
     "type": "student",
     "questionType": "likert"
   },
@@ -142,28 +142,28 @@
   {
     "number": 21,
     "question": "El profesor introduce cambios o mejoras en sus estrategias de enseñanza para favorecer el aprendizaje.",
-    "category": "Produccion de conocimiento pedagogico",
+    "category": "Producción de conocimiento pedagógico",
     "type": "student",
     "questionType": "likert"
   },
   {
     "number": 22,
     "question": "¿Cuáles considera que son las principales fortalezas del profesor o profesora en este curso?",
-    "category": "Produccion de conocimiento pedagogico",
+    "category": "Producción de conocimiento pedagógico",
     "type": "student",
     "questionType": "abierta"
   },
   {
     "number": 23,
     "question": "¿Qué aspectos considera que podrían mejorarse en el desarrollo del curso?",
-    "category": "Produccion de conocimiento pedagogico",
+    "category": "Producción de conocimiento pedagógico",
     "type": "student",
     "questionType": "abierta"
   },
   {
     "number": 24,
     "question": "¿Qué sugerencias haría para fortalecer la enseñanza y el aprendizaje en este curso?",
-    "category": "Produccion de conocimiento pedagogico",
+    "category": "Producción de conocimiento pedagógico",
     "type": "student",
     "questionType": "abierta"
   }

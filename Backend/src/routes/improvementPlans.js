@@ -9,7 +9,7 @@ router.get('/', requireAuth, requireRole('docente', 'directivo'), async (req, re
   try {
     const teacherId = req.userEmail
 
-    const plans = await ImprovementPlan.find({ teacherId }).sort({ createdAt: -1 })
+    const plans = await ImprovementPlan.find({ teacherId, authorRole: { $ne: 'directivo' } }).sort({ createdAt: -1 })
     res.status(200).json({ plans, count: plans.length })
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener los planes de mejora', error: error.message })
@@ -40,7 +40,7 @@ router.patch('/:id', requireAuth, requireRole('docente'), async (req, res) => {
     const { id } = req.params
     const teacherId = req.userEmail
 
-    const plan = await ImprovementPlan.findOne({ _id: id, teacherId })
+    const plan = await ImprovementPlan.findOne({ _id: id, teacherId, authorRole: { $ne: 'directivo' } })
     if (!plan) {
       return res.status(404).json({ message: 'Plan de mejora no encontrado' })
     }
@@ -60,7 +60,7 @@ router.delete('/:id', requireAuth, requireRole('docente'), async (req, res) => {
     const { id } = req.params
     const teacherId = req.userEmail
 
-    const plan = await ImprovementPlan.findOneAndDelete({ _id: id, teacherId })
+    const plan = await ImprovementPlan.findOneAndDelete({ _id: id, teacherId, authorRole: { $ne: 'directivo' } })
     if (!plan) {
       return res.status(404).json({ message: 'Plan de mejora no encontrado' })
     }
@@ -71,4 +71,48 @@ router.delete('/:id', requireAuth, requireRole('docente'), async (req, res) => {
   }
 })
 
+// GET /api/improvement-plans/teacher/:teacherId - Retroalimentacion de un docente (directivo)
+router.get('/teacher/:teacherId', requireAuth, requireRole('directivo'), async (req, res) => {
+  try {
+    const { teacherId } = req.params
+    const plans = await ImprovementPlan.find({ teacherId, authorRole: 'directivo' }).sort({ createdAt: -1 })
+    res.status(200).json({ plans, count: plans.length })
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener la retroalimentación', error: error.message })
+  }
+})
+
+// POST /api/improvement-plans/teacher/:teacherId - Crear retroalimentacion para un docente (directivo)
+router.post('/teacher/:teacherId', requireAuth, requireRole('directivo'), async (req, res) => {
+  try {
+    const { teacherId } = req.params
+    const { goal, actions, indicators, deadline, period, comments } = req.body
+
+    if (!goal || !actions || !indicators || !deadline || !period) {
+      return res.status(400).json({ message: 'Faltan datos: meta, acciones, indicadores, fecha límite y periodo son obligatorios' })
+    }
+
+    const plan = await ImprovementPlan.create({
+      teacherId,
+      userEmail: req.userEmail,   // el directivo que la escribe
+      goal, actions, indicators, deadline,
+      period,
+      comments: comments || '',
+      authorRole: 'directivo'
+    })
+    res.status(201).json({ message: 'Retroalimentación guardada correctamente', plan })
+  } catch (error) {
+    res.status(500).json({ message: 'Error al guardar la retroalimentación', error: error.message })
+  }
+})
+// GET /api/improvement-plans/from-director - Retroalimentacion que la direccion dejo al docente autenticado (solo lectura)
+router.get('/from-director', requireAuth, requireRole('docente'), async (req, res) => {
+  try {
+    const teacherId = req.userEmail
+    const plans = await ImprovementPlan.find({ teacherId, authorRole: 'directivo' }).sort({ createdAt: -1 })
+    res.status(200).json({ plans, count: plans.length })
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener la retroalimentación', error: error.message })
+  }
+})
 export default router

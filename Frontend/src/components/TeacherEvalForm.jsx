@@ -32,10 +32,8 @@ export default function TeacherEvalForm({ questions, teacherId, userEmail, onSub
 
     setSubmitting(true)
     try {
-      await api.post('/api/evaluations/submit', {
-        teacherId,
-        evaluationData: { scores, openAnswers },
-        userRole: 'docente'
+            await api.post('/api/evaluations/submit', {
+        evaluationData: { scores, openAnswers }
       })
       onSubmitted()
     } catch (err) {

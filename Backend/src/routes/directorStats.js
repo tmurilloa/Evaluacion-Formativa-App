@@ -6,14 +6,62 @@ import { requireAuth, requireRole } from '../middleware/auth.js'
 
 const router = express.Router()
 
-// GET /api/director-stats - Obtener estadisticas generales para el directivo
+// Orden pedagogico fijo de las categorias (para graficas y tablas estables)
+const CATEGORY_ORDER = [
+  'Carácter docente',
+  'Competencias pedagógicas',
+  'Dominio disciplinar',
+  'Contexto',
+  'Producción de conocimiento pedagógico'
+]
+
+const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
+const round2 = (n) => parseFloat(n.toFixed(2))
+
+// Scores likert (1-5) de una evaluacion para una lista de numeros de pregunta
+function scoresFor(evaluation, questionNumbers) {
+  const scores = evaluation.evaluationData?.scores
+  if (!scores) return []
+  return questionNumbers
+    .map(n => scores.get(String(n)))
+    .filter(v => typeof v === 'number' && v > 0)
+}
+
+// GET /api/director-stats - Estadisticas generales para el directivo
 router.get('/', requireAuth, requireRole('directivo'), async (req, res) => {
   try {
     const teachers = await Teacher.find()
     const evaluations = await Evaluation.find({ status: { $ne: 'draft' } })
     const teacherQuestions = await Question.find({ type: 'teacher' })
-    const studentOpenQuestions = await Question.find({ type: 'student', questionType: 'abierta' })
-    const openQuestions = teacherQuestions.filter(q => q.questionType === 'abierta')
+    const studentQuestions = await Question.find({ type: 'student' })
+
+    const teacherLikert = teacherQuestions.filter(q => q.questionType === 'likert')
+    const studentLikert = studentQuestions.filter(q => q.questionType === 'likert')
+    const teacherLikertNums = teacherLikert.map(q => q.number)
+    const studentLikertNums = studentLikert.map(q => q.number)
+
+    // categoria -> [numeros de pregunta], por banco
+    const teacherNumsByCategory = {}
+    teacherLikert.forEach(q => {
+      if (!q.category) return
+      if (!teacherNumsByCategory[q.category]) teacherNumsByCategory[q.category] = []
+      teacherNumsByCategory[q.category].push(q.number)
+    })
+    const studentNumsByCategory = {}
+    studentLikert.forEach(q => {
+      if (!q.category) return
+      if (!studentNumsByCategory[q.category]) studentNumsByCategory[q.category] = []
+      studentNumsByCategory[q.category].push(q.number)
+    })
+
+    // Categorias presentes, en el orden fijo primero y luego cualquier extra
+    const known = CATEGORY_ORDER.filter(c => teacherNumsByCategory[c] || studentNumsByCategory[c])
+    const extra = Object.keys({ ...teacherNumsByCategory, ...studentNumsByCategory })
+      .filter(c => !CATEGORY_ORDER.includes(c))
+    const categories = [...known, ...extra]
+
+    const teacherOpen = teacherQuestions.filter(q => q.questionType === 'abierta')
+    const studentOpen = studentQuestions.filter(q => q.questionType === 'abierta')
 
     const stats = {
       totalTeachers: teachers.length,
@@ -22,49 +70,55 @@ router.get('/', requireAuth, requireRole('directivo'), async (req, res) => {
       studentEvaluations: evaluations.filter(e => e.userRole === 'estudiante').length,
       teachers: [],
       overallAverage: 0,
-      categoryAverages: {}
+      categories,
+      categoryAveragesStudent: {}, // percepcion estudiantil institucional por categoria
+      categoryAveragesSelf: {},    // autoevaluacion institucional por categoria
+      categoryAverages: {},        // alias = estudiantil (compatibilidad con el radar actual)
+      scoreDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } // distribucion institucional (estudiantes)
     }
 
-    // Calcular promedios y respuestas abiertas por docente
+    // Acumuladores institucionales por categoria
+    const instStudentByCat = {}
+    const instSelfByCat = {}
+    categories.forEach(c => { instStudentByCat[c] = []; instSelfByCat[c] = [] })
+
     teachers.forEach(teacher => {
       const teacherEvals = evaluations.filter(e => e.teacherId === teacher.id)
       const selfEval = teacherEvals.find(e => e.userRole === 'docente')
       const studentEvals = teacherEvals.filter(e => e.userRole === 'estudiante')
 
-      let selfAverage = 0
-      let studentAverage = 0
+      const selfAllScores = selfEval ? scoresFor(selfEval, teacherLikertNums) : []
+      const studentAllScores = studentEvals.flatMap(e => scoresFor(e, studentLikertNums))
+      const selfAverage = round2(avg(selfAllScores))
+      const studentAverage = round2(avg(studentAllScores))
+      const overallAverage = studentAverage // el promedio general refleja la percepcion estudiantil
 
-      if (selfEval) {
-        const scores = [...selfEval.evaluationData.scores.values()]
-          .filter(v => typeof v === 'number' && v > 0)
-        if (scores.length > 0) {
-          selfAverage = scores.reduce((a, b) => a + b, 0) / scores.length
-        }
-      }
+      // Distribucion de puntajes del docente (estudiantes) + acumular institucional
+      const studentScoreDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+      studentAllScores.forEach(v => {
+        studentScoreDistribution[v] = (studentScoreDistribution[v] || 0) + 1
+        stats.scoreDistribution[v] = (stats.scoreDistribution[v] || 0) + 1
+      })
 
-      if (studentEvals.length > 0) {
-        const allScores = studentEvals.flatMap(e =>
-          [...e.evaluationData.scores.values()].filter(v => typeof v === 'number' && v > 0)
-        )
-        if (allScores.length > 0) {
-          studentAverage = allScores.reduce((a, b) => a + b, 0) / allScores.length
-        }
-      }
+      // Promedios por categoria (self y student) del docente + acumular institucional
+      const categoryScores = categories.map(category => {
+        const selfScores = selfEval ? scoresFor(selfEval, teacherNumsByCategory[category] || []) : []
+        const studentScores = studentEvals.flatMap(e => scoresFor(e, studentNumsByCategory[category] || []))
+        instSelfByCat[category].push(...selfScores)
+        instStudentByCat[category].push(...studentScores)
+        const self = round2(avg(selfScores))
+        const student = round2(avg(studentScores))
+        return { category, self, student, gap: round2(student - self) }
+      })
 
-      const overallAverage = selfAverage > 0 && studentAverage > 0
-        ? (selfAverage + studentAverage) / 2
-        : selfAverage > 0 ? selfAverage : studentAverage
-
-      // Respuestas abiertas - autoevaluación
       const selfOpenAnswers = selfEval
-        ? openQuestions.map(q => ({
+        ? teacherOpen.map(q => ({
             question: q.question,
             answer: selfEval.evaluationData?.openAnswers?.get(String(q.number)) || ''
           })).filter(a => a.answer)
         : []
 
-      // Respuestas abiertas - estudiantes agrupadas por pregunta
-      const studentOpenAnswers = studentOpenQuestions.map(q => ({
+      const studentOpenAnswers = studentOpen.map(q => ({
         question: q.question,
         answers: studentEvals
           .map(e => e.evaluationData?.openAnswers?.get(String(q.number)))
@@ -74,50 +128,33 @@ router.get('/', requireAuth, requireRole('directivo'), async (req, res) => {
       stats.teachers.push({
         id: teacher.id,
         name: teacher.name,
-        selfAverage: parseFloat(selfAverage.toFixed(2)),
-        studentAverage: parseFloat(studentAverage.toFixed(2)),
-        overallAverage: parseFloat(overallAverage.toFixed(2)),
+        enrolledStudents: teacher.enrolledStudents || 0,
+        selfAverage,
+        studentAverage,
+        overallAverage,
         studentEvaluationCount: studentEvals.length,
         hasSelfEvaluation: !!selfEval,
+        categoryScores,
+        studentScoreDistribution,
         selfOpenAnswers,
         studentOpenAnswers
       })
     })
 
-    // Calcular promedio general
+    // Promedio general institucional (promedio de los promedios estudiantiles validos)
     const validAverages = stats.teachers.map(t => t.overallAverage).filter(a => a > 0)
-    if (validAverages.length > 0) {
-      stats.overallAverage = parseFloat(
-        (validAverages.reduce((a, b) => a + b, 0) / validAverages.length).toFixed(2)
-      )
-    }
+    stats.overallAverage = round2(avg(validAverages))
 
-    // Calcular promedios por categoria (solo preguntas likert)
-    const likertQuestions = teacherQuestions.filter(q => q.questionType === 'likert')
-    const categoriesMap = {}
-    likertQuestions.forEach(q => {
-      if (q.category) {
-        if (!categoriesMap[q.category]) categoriesMap[q.category] = []
-        categoriesMap[q.category].push(q.number)
+    // Promedios institucionales por categoria
+    categories.forEach(category => {
+      if (instStudentByCat[category].length) {
+        stats.categoryAveragesStudent[category] = round2(avg(instStudentByCat[category]))
+      }
+      if (instSelfByCat[category].length) {
+        stats.categoryAveragesSelf[category] = round2(avg(instSelfByCat[category]))
       }
     })
-
-    Object.keys(categoriesMap).forEach(category => {
-      const questionNumbers = categoriesMap[category]
-      const allScores = evaluations.flatMap(e => {
-        const scores = e.evaluationData?.scores
-        if (!scores) return []
-        return questionNumbers
-          .filter(n => scores.get(String(n)) && typeof scores.get(String(n)) === 'number' && scores.get(String(n)) > 0)
-          .map(n => scores.get(String(n)))
-      })
-
-      if (allScores.length > 0) {
-        stats.categoryAverages[category] = parseFloat(
-          (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(2)
-        )
-      }
-    })
+    stats.categoryAverages = { ...stats.categoryAveragesStudent } // el radar actual sigue funcionando
 
     res.status(200).json(stats)
   } catch (error) {

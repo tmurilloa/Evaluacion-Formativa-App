@@ -30,7 +30,8 @@ router.get('/', requireAuth, requireRole('estudiante', 'docente', 'directivo'), 
 // POST /api/teachers - Agregar un nuevo docente
 router.post('/', requireAuth, requireRole('directivo', 'docente'), async (req, res) => {
   try {
-    const { id, name, subject } = req.body
+    const { name, subject, enrolledStudents } = req.body
+    const id = req.body.id?.trim().toLowerCase()
 
     if (!id || !name) {
       return res.status(400).json({ message: 'ID y nombre son requeridos' })
@@ -41,10 +42,34 @@ router.post('/', requireAuth, requireRole('directivo', 'docente'), async (req, r
       return res.status(409).json({ message: 'El docente ya existe' })
     }
 
-    const teacher = await Teacher.create({ id, name, subject })
+    const teacher = await Teacher.create({ id, name, subject, enrolledStudents })
     res.status(201).json({ message: 'Docente agregado correctamente', teacher })
   } catch (error) {
     res.status(500).json({ message: 'Error al agregar el docente', error: error.message })
+  }
+})
+
+// PATCH /api/teachers/:id - Actualizar el numero de matriculados (directivo)
+router.patch('/:id', requireAuth, requireRole('directivo'), async (req, res) => {
+  try {
+    const { enrolledStudents } = req.body
+
+    if (typeof enrolledStudents !== 'number' || enrolledStudents < 0) {
+      return res.status(400).json({ message: 'enrolledStudents debe ser un número no negativo' })
+    }
+
+    const teacher = await Teacher.findOneAndUpdate(
+      { id: req.params.id },
+      { enrolledStudents },
+      { new: true }
+    )
+    if (!teacher) {
+      return res.status(404).json({ message: 'Docente no encontrado' })
+    }
+
+    res.status(200).json({ message: 'Matriculados actualizado', teacher })
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar el docente', error: error.message })
   }
 })
 

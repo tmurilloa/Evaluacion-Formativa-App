@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "seed": "node scripts/seed.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "matriculados": "node scripts/set-matriculados.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,6 +20,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "mongoose": "^9.5.0"
   },
   "devDependencies": {

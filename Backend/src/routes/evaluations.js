@@ -2,25 +2,16 @@ import express from 'express'
 import Evaluation from '../models/Evaluation.js'
 import Question from '../models/Question.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
-
+import { hashEmail } from '../utils/anon.js'
 const router = express.Router()
 
-// GET /api/evaluations/all - Obtener todas las evaluaciones (directivo)
-router.get('/all', requireAuth, requireRole('directivo'), async (req, res) => {
-  try {
-    const evaluations = await Evaluation.find({ status: { $ne: 'draft' } })
-    res.status(200).json({ evaluations })
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener las evaluaciones', error: error.message })
-  }
-})
 
 // GET /api/evaluations/student - Progreso del estudiante autenticado por profesor (incluye borradores en curso)
 router.get('/student', requireAuth, requireRole('estudiante'), async (req, res) => {
   try {
-    const userEmail = req.userEmail
+    const clave = hashEmail(req.userEmail)
 
-    const evaluations = await Evaluation.find({ userEmail, userRole: 'estudiante' })
+    const evaluations = await Evaluation.find({ evaluatorKey: clave, userRole: 'estudiante' })
     const progress = {}
     evaluations.forEach(e => {
       progress[e.teacherId] = {
@@ -40,8 +31,8 @@ router.get('/teacher-results', requireAuth, requireRole('docente', 'directivo'),
   try {
     const teacherId = req.userEmail
 
-    const selfEvaluation = await Evaluation.findOne({ teacherId, userRole: 'docente', status: { $ne: 'draft' } })
-    const studentEvaluations = await Evaluation.find({ teacherId, userRole: 'estudiante', status: { $ne: 'draft' } })
+    const selfEvaluation = await Evaluation.findOne({ teacherId, userRole: 'docente', status: { $ne: 'draft' } }).select('-evaluatorKey')
+    const studentEvaluations = await Evaluation.find({ teacherId, userRole: 'estudiante', status: { $ne: 'draft' } }).select('-evaluatorKey')
     const hasData = !!selfEvaluation || studentEvaluations.length > 0
 
     res.status(200).json({ hasData, selfEvaluation, studentEvaluations })
@@ -62,17 +53,20 @@ router.get('/teacher-self-check', requireAuth, requireRole('docente'), async (re
   }
 })
 
-// POST /api/evaluations/submit - Enviar una evaluación completa en un solo paso (autoevaluación docente)
-router.post('/submit', requireAuth, requireRole('estudiante', 'docente'), async (req, res) => {
+// POST /api/evaluations/submit - Autoevaluación docente (un solo paso)
+router.post('/submit', requireAuth, requireRole('docente'), async (req, res) => {
   try {
-    const { teacherId, evaluationData, userRole } = req.body
-    const userEmail = req.userEmail
+    const { evaluationData } = req.body
 
-    if (!teacherId || !evaluationData || !userRole) {
+    // Un docente solo puede autoevaluarse a sí mismo: identidad y rol salen del token.
+    const teacherId = req.userEmail
+    const userRole = 'docente'
+
+    if (!evaluationData) {
       return res.status(400).json({ message: 'Datos incompletos' })
     }
 
-    const evaluation = await Evaluation.create({ teacherId, evaluationData, userEmail, userRole, status: 'submitted' })
+    const evaluation = await Evaluation.create({ teacherId, evaluationData, evaluatorKey: hashEmail(req.userEmail), userRole, status: 'submitted' })
     res.status(201).json({ message: 'Evaluación enviada correctamente', id: evaluation._id })
   } catch (error) {
     if (error.code === 11000) {
@@ -86,7 +80,7 @@ router.post('/submit', requireAuth, requireRole('estudiante', 'docente'), async 
 router.patch('/answer', requireAuth, requireRole('estudiante'), async (req, res) => {
   try {
     const { teacherId, questionNumber, questionType, value } = req.body
-    const userEmail = req.userEmail
+    const clave = hashEmail(req.userEmail)
     const userRole = 'estudiante'
 
     if (!teacherId || !Number.isInteger(questionNumber) || questionNumber <= 0) {
@@ -98,18 +92,17 @@ router.patch('/answer', requireAuth, requireRole('estudiante'), async (req, res)
     if (questionType === 'likert' && (!Number.isInteger(value) || value < 1 || value > 5)) {
       return res.status(400).json({ message: 'El valor de una pregunta likert debe ser un entero entre 1 y 5' })
     }
-
-    const existing = await Evaluation.findOne({ userEmail, teacherId, userRole })
+    const existing = await Evaluation.findOne({ evaluatorKey: clave, teacherId, userRole })
     if (existing && existing.status === 'submitted') {
       return res.status(409).json({ message: 'Esta evaluación ya fue enviada y no se puede editar' })
     }
 
     const field = questionType === 'likert' ? 'scores' : 'openAnswers'
     const evaluation = await Evaluation.findOneAndUpdate(
-      { userEmail, teacherId, userRole },
+      { evaluatorKey: clave, teacherId, userRole },
       {
         $set: { [`evaluationData.${field}.${questionNumber}`]: value, status: 'draft' },
-        $setOnInsert: { teacherId, userEmail, userRole }
+        $setOnInsert: { teacherId, evaluatorKey: clave, userRole }
       },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     )
@@ -127,14 +120,14 @@ router.patch('/answer', requireAuth, requireRole('estudiante'), async (req, res)
 router.post('/finalize', requireAuth, requireRole('estudiante'), async (req, res) => {
   try {
     const { teacherId } = req.body
-    const userEmail = req.userEmail
+    const clave = hashEmail(req.userEmail)
     const userRole = 'estudiante'
 
     if (!teacherId) {
       return res.status(400).json({ message: 'Datos incompletos' })
     }
-
-    const evaluation = await Evaluation.findOne({ userEmail, teacherId, userRole })
+    
+    const evaluation = await Evaluation.findOne({ evaluatorKey: clave, teacherId, userRole })
     if (!evaluation) {
       return res.status(404).json({ message: 'No hay respuestas guardadas para este docente' })
     }

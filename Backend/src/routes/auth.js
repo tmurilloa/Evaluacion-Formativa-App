@@ -1,43 +1,42 @@
 import express from 'express'
 import { createClerkClient } from '@clerk/backend'
 import Teacher from '../models/Teacher.js'
+import Roster from '../models/Roster.js'
+import { requireAuth } from '../middleware/auth.js'
+
+
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
 
 const router = express.Router()
 
-// POST /api/auth/update-role - Actualizar rol del usuario en Clerk
-router.post('/update-role', async (req, res) => {
+router.post('/update-role', requireAuth, async (req, res) => {
   try {
-    const { userId, role, email, fullName, subject } = req.body
+    // La identidad sale del token verificado, nunca del cuerpo.
+    const userId = req.userId
+    const email = req.userEmail?.trim().toLowerCase()
 
-    if (!userId || !role) {
-      return res.status(400).json({ message: 'userId y role son requeridos' })
+    if (!email) {
+      return res.status(400).json({ message: 'El token no incluye el correo del usuario' })
+    }
+    if (!email.endsWith('@unal.edu.co')) {
+      return res.status(403).json({ message: 'Debes registrarte con tu correo institucional @unal.edu.co' })
     }
 
-    if (!['estudiante', 'docente', 'directivo'].includes(role)) {
-      return res.status(400).json({ message: 'Rol inválido' })
-    }
-
-    if (role === 'docente' && (!fullName || !subject)) {
-      return res.status(400).json({ message: 'Nombre completo y materia son requeridos para docentes' })
-    }
+    // El padrón decide el rol; quien no aparezca es estudiante.
+    const entry = await Roster.findOne({ email })
+    const role = entry?.role || 'estudiante'
 
     const user = await clerkClient.users.updateUser(userId, {
       publicMetadata: { role }
     })
 
-    // Si el rol es docente, agregarlo a la coleccion de docentes
-    if (role === 'docente' && email) {
-      const normalizedEmail = email.trim().toLowerCase()
-      const existingTeacher = await Teacher.findOne({ id: normalizedEmail })
-      if (!existingTeacher) {
-        await Teacher.create({
-          id: normalizedEmail,
-          name: fullName,
-          subject
-        })
-        console.log('Docente agregado a MongoDB:', normalizedEmail)
+    // Si es docente, aseguramos su ficha en 'teachers' con los datos del padrón.
+    if (role === 'docente') {
+      const existing = await Teacher.findOne({ id: email })
+      if (!existing) {
+        await Teacher.create({ id: email, name: entry.name, subject: entry.subject || '' })
+        console.log('Docente agregado a MongoDB:', email)
       }
     }
 

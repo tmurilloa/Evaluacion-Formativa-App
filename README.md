@@ -4,7 +4,7 @@ App web para el proyecto de **Evaluación Formativa de la Docencia**: permite a 
 
 Tres roles, cada uno con su propio panel:
 
-- **Estudiante** — evalúa a los profesores que le correspondan (21 preguntas likert + 3 abiertas), pregunta por pregunta, con autoguardado.
+- **Estudiante** — evalúa a los profesores que le correspondan (21 preguntas likert + 3 abiertas), un profesor completo por página** y avanzando profesor por profesor, con autoguardado.
 - **Docente** — se autoevalúa, revisa sus resultados frente a la percepción estudiantil, y gestiona planes de mejora.
 - **Directivo** — ve estadísticas generales, gráficas comparativas y exporta un reporte CSV con todo (promedios y respuestas abiertas).
 
@@ -58,7 +58,7 @@ Evaluacion-Formativa-App/
     ├── src/
     │   ├── api/axios.js             # Instancia de axios + inyección del token de Clerk
     │   ├── hooks/                   # useStudentData, useTeacherData, useDirectorData
-    │   ├── components/               # TeacherEvalForm, TeacherResults, ImprovementPlanModal
+    │   ├── components/              # AppLayout, TeacherEvalForm, TeacherResults, ImprovementPlanModal,TeacherFeedbackModal, DirectorFeedbackCard
     │   ├── pages/                   # LoginPage, StudentPage, TeacherPage, DirectorPage
     │   ├── App.jsx                  # Ruteo por rol (react-router-dom)
     │   └── main.jsx                 # Bootstrap de la app + ClerkProvider
@@ -119,7 +119,7 @@ Requiere Node.js `^20.19.0` o `>=22.12.0` (lo exige Vite 8).
 # Backend
 cd Backend
 npm install
-# crear .env con MONGODB_URI, CLERK_SECRET_KEY, FRONTEND_URL=http://localhost:5173
+# crear .env con MONGODB_URI, CLERK_SECRET_KEY, FRONTEND_URL=http://localhost:3000
 npm run seed   # carga las preguntas iniciales (solo la primera vez / si cambian las plantillas)
 npm run dev    # http://localhost:5000
 
@@ -127,7 +127,7 @@ npm run dev    # http://localhost:5000
 cd Frontend
 npm install
 # crear .env con VITE_CLERK_PUBLISHABLE_KEY
-npm run dev    # http://localhost:5173
+npm run dev    # http://localhost:3000
 ```
 
 Ambos deben apuntar a la **misma** instancia de Clerk (mismo par de claves pub/secret) para que el rol asignado en el registro sea consistente.
@@ -171,13 +171,16 @@ Todas bajo el prefijo `/api`. Salvo donde se indica "pública", todas requieren 
 | `POST /evaluations/submit` | estudiante, docente | Envío en un solo paso (usado hoy solo por la autoevaluación docente) |
 | `GET /evaluations/teacher-results` | docente, directivo | Autoevaluación + evaluaciones de estudiantes de un profesor |
 | `GET /evaluations/teacher-self-check` | docente | Si el docente ya se autoevaluó |
-| `GET /evaluations/all` | directivo | Todas las evaluaciones enviadas |
+
 | `GET /improvement-plans` | docente, directivo | Planes de mejora del docente autenticado |
 | `POST /improvement-plans` | docente | Crea un plan de mejora |
 | `PATCH /improvement-plans/:id` | docente | Marca un plan como completado |
 | `DELETE /improvement-plans/:id` | docente | Elimina un plan |
 | `GET /director-stats` | directivo | Estadísticas agregadas (promedios, categorías, respuestas abiertas) |
 | `GET /health` | pública | Chequeo de salud del servidor |
+| `GET /improvement-plans/teacher/:teacherId`  | directivo | Retroalimentación que la dirección dejó a un docente |
+| `POST /improvement-plans/teacher/:teacherId` | directivo | Crea retroalimentación de la dirección para un docente |
+| `GET /improvement-plans/from-director`       | docente   | Retroalimentación que la dirección le dejó al docente autenticado |
 
 ## Despliegue
 

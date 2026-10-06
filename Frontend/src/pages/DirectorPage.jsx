@@ -1,9 +1,40 @@
 import { useState } from 'react'
-import { useClerk } from '@clerk/clerk-react'
+import { useClerk, useUser } from '@clerk/clerk-react'
 import { BarChart, Bar, PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useDirectorData } from '../hooks/useDirectorData.js'
+import AppLayout from '../components/AppLayout.jsx'
+import TeacherFeedbackModal from '../components/TeacherFeedbackModal.jsx'
+import FrequentTerms from '../components/FrequentTerms.jsx'
+import TeacherDetailModal from '../components/TeacherDetailModal.jsx'
 
-const COLORS = ['#466B3F', '#94B43B', '#A61C31', '#B1B2B0']
+import { COLORES, COLORES_PUNTAJE } from '../theme.js'
+import { RESPUESTAS_VISIBLES } from '../config/umbrales.js'
+import { estadoDocente, evaluarCobertura, esCritico, claseTarjetaPromedio } from '../utils/indicadores.js'
+
+const RADIAN = Math.PI / 180
+
+// Etiqueta por fuera de la porcion, en tinta gris (nunca del color de la serie).
+// Las porciones menores al 5% no se etiquetan: las cuenta la leyenda.
+function etiquetaPie({ cx, cy, midAngle, outerRadius, percent, value }) {
+  if (percent < 0.05) return null
+
+  const radio = outerRadius + 18
+  const x = cx + radio * Math.cos(-midAngle * RADIAN)
+  const y = cy + radio * Math.sin(-midAngle * RADIAN)
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={COLORES.grisOscuro}
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      style={{ fontSize: '0.78rem', fontWeight: 600 }}
+    >
+      {value} · {Math.round(percent * 100)}%
+    </text>
+  )
+}
 
 function exportCSV(stats) {
   if (!stats?.teachers) return
@@ -45,7 +76,7 @@ function exportCSV(stats) {
     }
   })
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = `reporte_evaluaciones_${new Date().toISOString().split('T')[0]}.csv`
@@ -110,7 +141,7 @@ function OpenAnswersModal({ teacher, onClose }) {
                       <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>
                         {item.question}
                       </p>
-                      <div className="p-3 rounded" style={{ backgroundColor: '#f8f9fa', borderLeft: '3px solid #94B43B' }}>
+                      <div className="p-3 rounded" style={{ backgroundColor: COLORES.fondoSuave, borderLeft: `3px solid ${COLORES.verde}` }}>
                         <p className="mb-0" style={{ fontSize: '0.9rem' }}>{item.answer}</p>
                       </div>
                     </div>
@@ -134,23 +165,24 @@ function OpenAnswersModal({ teacher, onClose }) {
                     .filter(q => q.answers.length > 0)
                     .map((item, i) => {
                       const total = item.answers.length
-                      const shown = item.answers.slice(0, 10)
+                      const shown = item.answers.slice(0, RESPUESTAS_VISIBLES)
                       return (
                         <div key={i} className="mb-4">
                           <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>
                             {item.question}
                           </p>
-                          {total > 10 && (
+                          {total > RESPUESTAS_VISIBLES && (
                             <p className="text-muted mb-2" style={{ fontSize: '0.78rem' }}>
-                              Mostrando 10 de {total} respuestas
+                              Mostrando {RESPUESTAS_VISIBLES} de {total} respuestas
                             </p>
                           )}
+                          <FrequentTerms answers={item.answers} />
                           <ul className="list-unstyled mb-0">
                             {shown.map((ans, j) => (
                               <li key={j} className="mb-2 d-flex align-items-start gap-2">
                                 <span
                                   className="badge rounded-pill mt-1 flex-shrink-0"
-                                  style={{ backgroundColor: '#466B3F', fontSize: '0.7rem' }}
+                                  style={{ backgroundColor: COLORES.verdeOscuro, fontSize: '0.7rem' }}
                                 >
                                   {j + 1}
                                 </span>
@@ -183,12 +215,19 @@ function OpenAnswersModal({ teacher, onClose }) {
 
 export default function DirectorPage() {
   const { signOut } = useClerk()
+  const { user } = useUser()
   const { stats, loading, error, reload } = useDirectorData()
   const [selectedTeacher, setSelectedTeacher] = useState(null)
+  const [feedbackTeacher, setFeedbackTeacher] = useState(null)
+  const [detailTeacher, setDetailTeacher] = useState(null)
 
   const sortedTeachers = stats?.teachers
     ? [...stats.teachers].sort((a, b) => b.overallAverage - a.overallAverage)
     : []
+  
+  const criticos = sortedTeachers.filter(esCritico)
+  const bajaCobertura = sortedTeachers.filter(t => t.studentEvaluationCount > 0 && !evaluarCobertura(t).suficiente)
+  const sinEvaluar = sortedTeachers.filter(t => t.studentEvaluationCount === 0)
 
   const barData = sortedTeachers
     .filter(t => t.overallAverage > 0)
@@ -196,14 +235,24 @@ export default function DirectorPage() {
     .map(t => ({ name: t.name, Promedio: t.overallAverage }))
 
   const pieData = stats ? [
-    { name: 'Con ambas evaluaciones', value: stats.teachers.filter(t => t.hasSelfEvaluation && t.studentEvaluationCount > 0).length },
-    { name: 'Solo autoevaluación', value: stats.teachers.filter(t => t.hasSelfEvaluation && t.studentEvaluationCount === 0).length },
-    { name: 'Solo evaluación estudiantil', value: stats.teachers.filter(t => !t.hasSelfEvaluation && t.studentEvaluationCount > 0).length },
-    { name: 'Sin evaluaciones', value: stats.teachers.filter(t => !t.hasSelfEvaluation && t.studentEvaluationCount === 0).length }
-  ] : []
+    { name: 'Con ambas evaluaciones', value: stats.teachers.filter(t => t.hasSelfEvaluation && t.studentEvaluationCount > 0).length, color: COLORES.verdeOscuro },
+    { name: 'Solo autoevaluación', value: stats.teachers.filter(t => t.hasSelfEvaluation && t.studentEvaluationCount === 0).length, color: COLORES.verde },
+    { name: 'Solo evaluación estudiantil', value: stats.teachers.filter(t => !t.hasSelfEvaluation && t.studentEvaluationCount > 0).length, color: COLORES.rojo },
+    { name: 'Sin evaluaciones', value: stats.teachers.filter(t => !t.hasSelfEvaluation && t.studentEvaluationCount === 0).length, color: COLORES.grisClaro }
+  ].filter(d => d.value > 0) : []
 
   const radarData = stats?.categoryAverages
     ? Object.entries(stats.categoryAverages).map(([category, average]) => ({ category, Promedio: average }))
+    : []
+  
+  const categoryRanking = stats
+    ? Object.entries(stats.categoryAveragesStudent || {})
+        .map(([category, value]) => ({ category, value }))
+        .sort((a, b) => b.value - a.value)
+    : []
+
+  const instDistData = stats
+    ? [1, 2, 3, 4, 5].map(n => ({ score: String(n), Respuestas: stats.scoreDistribution?.[n] || 0 }))
     : []
 
   const hasOpenAnswers = (teacher) =>
@@ -222,25 +271,35 @@ export default function DirectorPage() {
   }
 
   return (
-    <div className="container mt-4">
+    <AppLayout
+      title="Panel de Directivos"
+      roleLabel="Directivo"
+      userName={user?.firstName || user?.primaryEmailAddress?.emailAddress || 'Directivo'}
+      onSignOut={() => signOut()}
+      nav={[
+        { label: 'Inicio', icon: 'bi-house', active: true, onClick: () => {} },
+      ]}
+    >
       <div className="card">
-        <div className="card-header role-director d-flex justify-content-between align-items-center">
-          <h4 className="mb-0">Panel de Directivos - Reportes y Analytics</h4>
-          <div className="d-flex gap-2">
-            <button className="btn btn-sm btn-light" onClick={reload}>
+        <div className="card-body">
+          <div className="d-flex justify-content-end gap-2 mb-3">
+            <button className="btn btn-sm btn-outline-secondary" onClick={reload}>
               <i className="bi bi-arrow-clockwise me-1"></i>Actualizar
             </button>
-            <button className="btn btn-sm btn-light" onClick={() => exportCSV(stats)}>
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => exportCSV(stats)}>
               <i className="bi bi-download me-1"></i>Exportar
             </button>
-            <button className="btn btn-sm btn-light" onClick={() => signOut()}>
-              <i className="bi bi-box-arrow-right me-1"></i>Cerrar sesión
-            </button>
           </div>
-        </div>
+            {error && <div className="alert alert-danger">{error}</div>}
 
-        <div className="card-body">
-          {error && <div className="alert alert-danger">{error}</div>}
+          {stats && (criticos.length > 0 || bajaCobertura.length > 0 || sinEvaluar.length > 0) && (
+            <div className="alert alert-warning py-2" style={{ fontSize: '0.9rem' }}>
+              <i className="bi bi-exclamation-triangle me-2"></i>
+              {criticos.length > 0 && <span className="me-3"><strong>{criticos.length}</strong> con promedio crítico.</span>}
+              {bajaCobertura.length > 0 && <span className="me-3"><strong>{bajaCobertura.length}</strong> con cobertura insuficiente.</span>}
+              {sinEvaluar.length > 0 && <span><strong>{sinEvaluar.length}</strong> sin evaluaciones estudiantiles.</span>}
+            </div>
+          )}
 
           {/* Tarjetas de estadísticas */}
           <div className="row mb-4">
@@ -269,7 +328,7 @@ export default function DirectorPage() {
               </div>
             </div>
             <div className="col-md-3">
-              <div className="card bg-warning text-dark">
+              <div className={`card text-white ${claseTarjetaPromedio(stats?.overallAverage)}`}>
                 <div className="card-body">
                   <h6 className="card-title">Promedio General</h6>
                   <h2 className="mb-0">{stats?.overallAverage || '-'}</h2>
@@ -290,7 +349,7 @@ export default function DirectorPage() {
                         <XAxis type="number" domain={[0, 5]} />
                         <YAxis type="category" dataKey="name" width={120} />
                         <Tooltip />
-                        <Bar dataKey="Promedio" fill="#94B43B" />
+                        <Bar dataKey="Promedio" fill={COLORES.verde} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
@@ -305,15 +364,33 @@ export default function DirectorPage() {
                 <div className="card-header"><h5 className="mb-0">Distribución de Evaluaciones</h5></div>
                 <div className="card-body">
                   {pieData.some(d => d.value > 0) ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                          {pieData.map((_, index) => (
-                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart margin={{ top: 16, right: 32, bottom: 8, left: 32 }}>
+                        <Pie
+                          data={pieData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="45%"
+                          outerRadius={75}
+                          paddingAngle={2}
+                          labelLine={false}
+                          label={etiquetaPie}
+                        >
+                          {pieData.map(d => (
+                            <Cell key={d.name} fill={d.color} />
                           ))}
                         </Pie>
-                        <Tooltip />
-                        <Legend />
+                        <Tooltip formatter={(value, name) => [`${value} docente${value === 1 ? '' : 's'}`, name]} />
+                        <Legend
+                          verticalAlign="bottom"
+                          iconType="circle"
+                          formatter={(value, entry) => (
+                            <span style={{ color: COLORES.grisOscuro, fontSize: '0.82rem' }}>
+                              {value} ({entry.payload.value})
+                            </span>
+                          )}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
@@ -333,14 +410,86 @@ export default function DirectorPage() {
                   <RadarChart data={radarData}>
                     <PolarGrid />
                     <PolarAngleAxis dataKey="category" />
-                    <Radar name="Promedio" dataKey="Promedio" stroke="#94B43B" fill="#94B43B" fillOpacity={0.2} />
+                    <Radar name="Promedio" dataKey="Promedio" stroke={COLORES.verde} fill={COLORES.verde} fillOpacity={0.2} />
                     <Tooltip />
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           )}
+          
+          {/* Analisis institucional por categoria y distribucion */}
+          {stats && (
+            <div className="row g-4 mb-4">
+              <div className="col-lg-7">
+                <div className="card h-100">
+                  <div className="card-header"><h5 className="mb-0">Fortalezas y debilidades por categoría</h5></div>
+                  <div className="card-body">
+                    {categoryRanking.length > 0 ? (
+                      <>
+                        {categoryRanking.map((c, i) => {
+                          const isTop = i === 0
+                          const isBottom = i === categoryRanking.length - 1
+                          const color = isTop ? COLORES.verdeOscuro : isBottom ? COLORES.rojo : COLORES.verde
+                          return (
+                            <div key={c.category} className="mb-3">
+                              <div className="d-flex justify-content-between mb-1" style={{ fontSize: '0.9rem' }}>
+                                <span>{c.category}</span>
+                                <strong>{c.value}</strong>
+                              </div>
+                              <div className="progress" style={{ height: '10px' }}>
+                                <div
+                                  className="progress-bar"
+                                  role="progressbar"
+                                  style={{ width: `${(c.value / 5) * 100}%`, backgroundColor: color }}
+                                  aria-valuenow={c.value}
+                                  aria-valuemin="0"
+                                  aria-valuemax="5"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <p className="text-muted mb-0 mt-3" style={{ fontSize: '0.85rem' }}>
+                          <i className="bi bi-arrow-up-circle text-success me-1"></i>
+                          Fortaleza: <strong>{categoryRanking[0].category}</strong>
+                          {' · '}
+                          <i className="bi bi-arrow-down-circle text-danger me-1"></i>
+                          A reforzar: <strong>{categoryRanking[categoryRanking.length - 1].category}</strong>
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-muted">No hay datos disponibles</p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
+              <div className="col-lg-5">
+                <div className="card h-100">
+                  <div className="card-header"><h5 className="mb-0">Distribución global de puntajes</h5></div>
+                  <div className="card-body">
+                    {instDistData.some(d => d.Respuestas > 0) ? (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={instDistData}>
+                          <XAxis dataKey="score" />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="Respuestas">
+                            {instDistData.map((_, i) => (
+                              <Cell key={i} fill={COLORES_PUNTAJE[i]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-muted">No hay datos disponibles</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Tabla de docentes */}
           <div className="mt-4">
             <h5>Detalle de Docentes</h5>
@@ -351,9 +500,9 @@ export default function DirectorPage() {
                     <th>Docente</th>
                     <th>Autoevaluación</th>
                     <th>Promedio Estudiantes</th>
+                    <th className="text-center">Estado</th>
                     <th>Evaluaciones Recibidas</th>
-                    <th>Promedio General</th>
-                    <th>Respuestas</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,27 +511,59 @@ export default function DirectorPage() {
                       <td>{teacher.name}</td>
                       <td>
                         {teacher.hasSelfEvaluation
-                          ? <span className="badge bg-primary">{teacher.selfAverage}</span>
+                          ? <span className="badge bg-info">{teacher.selfAverage}</span>
                           : <span className="text-muted">Sin datos</span>}
                       </td>
                       <td>
                         {teacher.studentEvaluationCount > 0
-                          ? <span className="badge bg-warning text-dark">{teacher.studentAverage}</span>
+                          ? <span className="badge bg-primary">{teacher.studentAverage}</span>
                           : <span className="text-muted">Sin datos</span>}
                       </td>
-                      <td className="text-center">{teacher.studentEvaluationCount}</td>
-                      <td><strong>{teacher.overallAverage > 0 ? teacher.overallAverage : '-'}</strong></td>
+                      <td className="text-center">
+                        {(() => {
+                          const e = estadoDocente(teacher)
+                          return <span className={`badge ${e.cls}`}>{e.label}</span>
+                        })()}
+                      </td>
+                      
+                      <td className="text-center">
+                        {(() => {
+                          const c = evaluarCobertura(teacher)
+                          if (c.recibidas === 0) return <span className="text-muted">0</span>
+                          if (!c.suficiente) return (
+                            <span className="badge bg-warning" title="Muestra insuficiente: interpretar con cautela">
+                              {c.etiqueta} · baja
+                            </span>
+                          )
+                          return <span className="badge bg-light text-dark border">{c.etiqueta}</span>
+                        })()}
+                      </td>
+                      
                       <td>
-                        {hasOpenAnswers(teacher) ? (
+                        <div className="d-flex gap-2">
+                          {hasOpenAnswers(teacher) ? (
+                            <button
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setSelectedTeacher(teacher)}
+                            >
+                              <i className="bi bi-chat-left-text me-1"></i>Ver respuestas
+                            </button>
+                          ) : (
+                            <span className="text-muted align-self-center" style={{ fontSize: '0.85rem' }}>Sin respuestas</span>
+                          )}
                           <button
                             className="btn btn-sm btn-outline-secondary"
-                            onClick={() => setSelectedTeacher(teacher)}
+                            onClick={() => setDetailTeacher(teacher)}
                           >
-                            <i className="bi bi-chat-left-text me-1"></i>Ver respuestas
+                            <i className="bi bi-graph-up me-1"></i>Detalle
                           </button>
-                        ) : (
-                          <span className="text-muted" style={{ fontSize: '0.85rem' }}>Sin respuestas</span>
-                        )}
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => setFeedbackTeacher(teacher)}
+                          >
+                            <i className="bi bi-journal-text me-1"></i>Retroalimentar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -405,6 +586,15 @@ export default function DirectorPage() {
         teacher={selectedTeacher}
         onClose={() => setSelectedTeacher(null)}
       />
-    </div>
+      
+      <TeacherFeedbackModal
+        teacher={feedbackTeacher}
+        onClose={() => setFeedbackTeacher(null)}
+      />
+      <TeacherDetailModal
+        teacher={detailTeacher}
+        onClose={() => setDetailTeacher(null)}
+      />
+    </AppLayout>
   )
 }

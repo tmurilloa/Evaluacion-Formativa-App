@@ -5,9 +5,9 @@ const evaluationSchema = mongoose.Schema({
         type: String,
         required: true
     },
-    userEmail: {
+    evaluatorKey: {
         type: String,
-        required:true
+        required: true
     },
     userRole: {
         type: String,
@@ -31,6 +31,6 @@ const evaluationSchema = mongoose.Schema({
     }
 }, {timestamps: true})
 
-evaluationSchema.index({ userEmail: 1, teacherId: 1, userRole: 1 }, { unique: true })
+evaluationSchema.index({ evaluatorKey: 1, teacherId: 1, userRole: 1 }, { unique: true })
 
 export default mongoose.model('Evaluation', evaluationSchema)

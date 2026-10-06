@@ -3,9 +3,11 @@ import api from '../api/axios.js'
 
 export function useTeacherData(teacherId) {
   const [questions, setQuestions] = useState([])
+  const [studentQuestions, setStudentQuestions] = useState([])
   const [results, setResults] = useState(null)
   const [plans, setPlans] = useState([])
   const [teacherInfo, setTeacherInfo] = useState(null)
+  const [directorFeedback, setDirectorFeedback] = useState([])
   const [hasEvaluated, setHasEvaluated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -19,24 +21,36 @@ export function useTeacherData(teacherId) {
     setLoading(true)
     setError('')
     try {
-      const [questionsRes, selfCheckRes, teacherInfoRes] = await Promise.all([
+      const [questionsRes, studentQuestionsRes, selfCheckRes, teacherInfoRes] = await Promise.all([
         api.get('/api/questions?type=teacher'),
+        api.get('/api/questions?type=student'),
         api.get('/api/evaluations/teacher-self-check'),
         api.get('/api/teachers/me')
       ])
 
       setQuestions(questionsRes.data)
+      setStudentQuestions(studentQuestionsRes.data)
       setHasEvaluated(selfCheckRes.data.hasEvaluated)
       setTeacherInfo(teacherInfoRes.data)
     } catch (err) {
       setError('Error al cargar los datos. Por favor recarga la página.')
-      console.log('Error cargando datos del docente:', err)
+      console.log('Error cargando datos del docente:', err?.config?.url, err?.response?.status, err?.response?.data)
     } finally {
       setLoading(false)
     }
+
+    // Opcional: si la direccion aun no ha dejado retroalimentacion, o el endpoint falla,
+    // la pagina del docente debe seguir funcionando igual
+    try {
+      const directorFeedbackRes = await api.get('/api/improvement-plans/from-director')
+      setDirectorFeedback(directorFeedbackRes.data.plans || [])
+    } catch (err) {
+      setDirectorFeedback([])
+      console.log('No se pudo cargar la retroalimentación del directivo:', err?.response?.status)
+    }
   }
 
-  const loadResults = async () => {
+const loadResults = async () => {
     try {
       const [resultsRes, plansRes] = await Promise.all([
         api.get('/api/evaluations/teacher-results'),
@@ -45,7 +59,14 @@ export function useTeacherData(teacherId) {
       setResults(resultsRes.data)
       setPlans(plansRes.data.plans || [])
     } catch (err) {
-      console.log('Error cargando resultados:', err)
+      console.log('Error cargando resultados:', err?.config?.url, err?.response?.status)
+    }
+
+    try {
+      const feedbackRes = await api.get('/api/improvement-plans/from-director')
+      setDirectorFeedback(feedbackRes.data.plans || [])
+    } catch (err) {
+      console.log('No se pudo cargar la retroalimentación del directivo:', err?.response?.status)
     }
   }
 
@@ -70,6 +91,5 @@ export function useTeacherData(teacherId) {
       throw err
     }
   }
-
-  return { questions, results, plans, teacherInfo, hasEvaluated, loading, error, loadResults, markAsEvaluated, setPlans, completePlan, deletePlan }
+  return { questions, studentQuestions, results, plans, directorFeedback, teacherInfo, hasEvaluated, loading, error, loadResults, markAsEvaluated, setPlans, completePlan, deletePlan }
 }

@@ -11,7 +11,7 @@ const questionSchema = new mongoose.Schema({
     },
     category: {
         type: String,
-        enum: ['Caracter docente', 'Competencias pedagogicas', 'Dominio disciplinar', 'Contexto', 'Produccion de conocimiento pedagogico'],
+        enum: ['Carácter docente', 'Competencias pedagógicas', 'Dominio disciplinar', 'Contexto', 'Producción de conocimiento pedagógico'],
         required: true
     },
     type: {

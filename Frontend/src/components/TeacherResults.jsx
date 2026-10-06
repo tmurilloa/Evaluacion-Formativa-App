@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import FrequentTerms from './FrequentTerms.jsx'
+import { COLORES } from '../theme.js'
+import { RESPUESTAS_VISIBLES, BRECHA_RELEVANTE } from '../config/umbrales.js'
 
-function processResults(results, questions) {
+function processResults(results, questions, studentQuestions) {
   if (!results || !results.hasData) return null
 
   const { selfEvaluation, studentEvaluations } = results
-  const openQuestions = questions?.filter(q => q.questionType === 'abierta') || []
+  const selfOpenQuestions = questions?.filter(q => q.questionType === 'abierta') || []
+  const studentOpenQuestions = studentQuestions?.filter(q => q.questionType === 'abierta') || []
 
   // Scores Likert - autoevaluación
   const selfScores = selfEvaluation
@@ -17,7 +21,7 @@ function processResults(results, questions) {
 
   // Respuestas abiertas - autoevaluación
   const selfOpenAnswers = selfEvaluation
-    ? openQuestions.map(q => ({
+    ? selfOpenQuestions.map(q => ({
         question: q.question,
         answer: selfEvaluation.evaluationData?.openAnswers?.[q.number] || ''
       })).filter(a => a.answer)
@@ -40,7 +44,7 @@ function processResults(results, questions) {
   }))
 
   // Respuestas abiertas - estudiantes agrupadas por pregunta
-  const studentOpenAnswers = openQuestions.map(q => ({
+  const studentOpenAnswers = studentOpenQuestions.map(q => ({
     question: q.question,
     answers: studentEvaluations
       .map(e => e.evaluationData?.openAnswers?.[q.number])
@@ -94,7 +98,7 @@ function exportCSV(teacherName, processedData) {
     }
   }
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = `resultados_${teacherName}_${new Date().toISOString().split('T')[0]}.csv`
@@ -129,7 +133,7 @@ function OpenAnswersSection({ processedData }) {
           {processedData.selfOpenAnswers.map((item, i) => (
             <div key={i} className="mb-3">
               <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>{item.question}</p>
-              <div className="p-3 rounded" style={{ backgroundColor: '#f8f9fa', borderLeft: '3px solid #466B3F' }}>
+              <div className="p-3 rounded" style={{ backgroundColor: COLORES.fondoSuave, borderLeft: `3px solid ${COLORES.verdeOscuro}` }}>
                 <p className="mb-0" style={{ fontSize: '0.9rem' }}>{item.answer}</p>
               </div>
             </div>
@@ -148,19 +152,20 @@ function OpenAnswersSection({ processedData }) {
             .filter(q => q.answers.length > 0)
             .map((item, i) => {
               const total = item.answers.length
-              const shown = item.answers.slice(0, 10)
+              const shown = item.answers.slice(0, RESPUESTAS_VISIBLES)
               return (
                 <div key={i} className="mb-4">
                   <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>{item.question}</p>
-                  {total > 10 && (
+                  {total > RESPUESTAS_VISIBLES && (
                     <p className="text-muted mb-2" style={{ fontSize: '0.78rem' }}>
-                      Mostrando 10 de {total} respuestas
+                      Mostrando {RESPUESTAS_VISIBLES} de {total} respuestas
                     </p>
                   )}
+                  <FrequentTerms answers={item.answers} />
                   <ul className="list-unstyled mb-0">
                     {shown.map((ans, j) => (
                       <li key={j} className="mb-2 d-flex align-items-start gap-2">
-                        <span className="badge rounded-pill mt-1 flex-shrink-0" style={{ backgroundColor: '#94B43B', fontSize: '0.7rem' }}>
+                        <span className="badge rounded-pill mt-1 flex-shrink-0" style={{ backgroundColor: COLORES.verde, fontSize: '0.7rem' }}>
                           {j + 1}
                         </span>
                         <span style={{ fontSize: '0.9rem' }}>{ans}</span>
@@ -273,8 +278,8 @@ function PlanCard({ plan, index, total, onComplete, onDelete }) {
   )
 }
 
-export default function TeacherResults({ results, plans, questions, teacherId, onClose, onCreatePlan, onCompletePlan, onDeletePlan }) {
-  const processedData = processResults(results, questions)
+export default function TeacherResults({ results, plans, questions, studentQuestions, teacherId, onClose, onCreatePlan, onCompletePlan, onDeletePlan }) {
+  const processedData = processResults(results, questions, studentQuestions)
 
   const selfAverage = processedData?.hasSelfEvaluation
     ? processedData.selfScores.reduce((s, x) => s + x.score, 0) / processedData.selfScores.length
@@ -338,8 +343,8 @@ export default function TeacherResults({ results, plans, questions, teacherId, o
                     <YAxis domain={[0, 5]} />
                     <Tooltip />
                     <Legend />
-                    {processedData.hasSelfEvaluation && <Bar dataKey="Autoevaluación" fill="#466B3F" />}
-                    {processedData.hasStudentEvaluations && <Bar dataKey="Estudiantes" fill="#94B43B" />}
+                    {processedData.hasSelfEvaluation && <Bar dataKey="Autoevaluación" fill={COLORES.verdeOscuro} />}
+                    {processedData.hasStudentEvaluations && <Bar dataKey="Estudiantes" fill={COLORES.verde} />}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -352,8 +357,8 @@ export default function TeacherResults({ results, plans, questions, teacherId, o
                     <PolarAngleAxis dataKey="range" />
                     <Tooltip />
                     <Legend />
-                    {processedData.hasSelfEvaluation && <Radar name="Autoevaluación" dataKey="Autoevaluación" stroke="#466B3F" fill="#466B3F" fillOpacity={0.2} />}
-                    {processedData.hasStudentEvaluations && <Radar name="Estudiantes" dataKey="Estudiantes" stroke="#94B43B" fill="#94B43B" fillOpacity={0.2} />}
+                    {processedData.hasSelfEvaluation && <Radar name="Autoevaluación" dataKey="Autoevaluación" stroke={COLORES.verdeOscuro} fill={COLORES.verdeOscuro} fillOpacity={0.2} />}
+                    {processedData.hasStudentEvaluations && <Radar name="Estudiantes" dataKey="Estudiantes" stroke={COLORES.verde} fill={COLORES.verde} fillOpacity={0.2} />}
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
@@ -362,17 +367,20 @@ export default function TeacherResults({ results, plans, questions, teacherId, o
             {/* Resumen */}
             <div className="alert alert-info mb-4">
               {processedData.hasSelfEvaluation && (
-                <p className="mb-1"><strong>Promedio Autoevaluación:</strong> <span className="badge bg-primary">{selfAverage.toFixed(2)}</span></p>
+                <p className="mb-1"><strong>Promedio Autoevaluación:</strong> <span className="badge bg-info">{selfAverage.toFixed(2)}</span></p>
               )}
               {processedData.hasStudentEvaluations && (
-                <p className="mb-1"><strong>Promedio Estudiantes ({processedData.studentCount}):</strong> <span className="badge bg-warning text-dark">{studentAverage.toFixed(2)}</span></p>
+                <p className="mb-1"><strong>Promedio Estudiantes ({processedData.studentCount}):</strong> <span className="badge bg-primary">{studentAverage.toFixed(2)}</span></p>
               )}
               {processedData.hasSelfEvaluation && processedData.hasStudentEvaluations && (() => {
-                const diff = selfAverage - studentAverage
-                if (Math.abs(diff) >= 0.3) {
-                  return diff > 0
-                    ? <p className="mb-0 mt-2 text-warning"><i className="bi bi-exclamation-triangle me-2"></i>Tu autoevaluación es {diff.toFixed(2)} puntos más alta que la percepción estudiantil.</p>
-                    : <p className="mb-0 mt-2 text-success"><i className="bi bi-check-circle me-2"></i>Los estudiantes valoran tu desempeño {Math.abs(diff).toFixed(2)} puntos más alto que tu autoevaluación.</p>
+                // Convencion unica en toda la app: brecha = estudiantes - autoevaluacion
+                const brecha = studentAverage - selfAverage
+
+                if (brecha <= -BRECHA_RELEVANTE) {
+                  return <p className="mb-0 mt-2 text-warning"><i className="bi bi-exclamation-triangle me-2"></i>Tu autoevaluación es {Math.abs(brecha).toFixed(2)} puntos más alta que la percepción estudiantil.</p>
+                }
+                if (brecha >= BRECHA_RELEVANTE) {
+                  return <p className="mb-0 mt-2 text-success"><i className="bi bi-check-circle me-2"></i>Los estudiantes valoran tu desempeño {brecha.toFixed(2)} puntos más alto que tu autoevaluación.</p>
                 }
                 return <p className="mb-0 mt-2"><i className="bi bi-check-circle me-2"></i>Hay buena alineación entre tu autoevaluación y la percepción estudiantil.</p>
               })()}
@@ -393,7 +401,7 @@ export default function TeacherResults({ results, plans, questions, teacherId, o
                         return (
                           <tr key={s.questionId}>
                             <td title={questionText}>{truncateText(questionText)}</td>
-                            <td className="text-center"><span className="badge bg-primary">{s.score}</span></td>
+                            <td className="text-center"><span className="badge bg-info">{s.score}</span></td>
                           </tr>
                         )
                       })}
@@ -412,12 +420,12 @@ export default function TeacherResults({ results, plans, questions, teacherId, o
                       <tr><th>Pregunta</th><th className="text-center">Promedio</th></tr>
                     </thead>
                     <tbody>
-                      {processedData.studentScores.map(s => {
-                        const questionText = getQuestionText(questions, s.questionId)
+                        {processedData.studentScores.map(s => {
+                          const questionText = getQuestionText(studentQuestions, s.questionId)
                         return (
                           <tr key={s.questionId}>
                             <td title={questionText}>{truncateText(questionText)}</td>
-                            <td className="text-center"><span className="badge bg-warning text-dark">{s.score.toFixed(1)}</span></td>
+                            <td className="text-center"><span className="badge bg-primary">{s.score.toFixed(1)}</span></td>
                           </tr>
                         )
                       })}
