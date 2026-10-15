@@ -3,6 +3,7 @@ import Evaluation from '../models/Evaluation.js'
 import Question from '../models/Question.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { hashEmail } from '../utils/anon.js'
+import { estaInscrito } from '../utils/inscripcion.js'
 const router = express.Router()
 
 
@@ -96,6 +97,11 @@ router.patch('/answer', requireAuth, requireRole('estudiante'), async (req, res)
     if (existing && existing.status === 'submitted') {
       return res.status(409).json({ message: 'Esta evaluación ya fue enviada y no se puede editar' })
     }
+    // Solo se verifica la inscripcion al crear la evaluacion: si ya existe un
+    // borrador, es porque paso esta verificacion antes (ahorra una consulta).
+    if (!existing && !(await estaInscrito(req.userEmail, teacherId))) {
+      return res.status(403).json({ message: 'No apareces inscrito con este docente.' })
+    }
 
     const field = questionType === 'likert' ? 'scores' : 'openAnswers'
     const evaluation = await Evaluation.findOneAndUpdate(
@@ -157,4 +163,4 @@ router.post('/finalize', requireAuth, requireRole('estudiante'), async (req, res
   }
 })
 
-export default router
+export default router

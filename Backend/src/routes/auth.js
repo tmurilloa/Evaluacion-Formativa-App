@@ -27,9 +27,15 @@ router.post('/update-role', requireAuth, async (req, res) => {
     const entry = await Roster.findOne({ email })
     const role = entry?.role || 'estudiante'
 
-    const user = await clerkClient.users.updateUser(userId, {
-      publicMetadata: { role }
-    })
+    // Solo se llama a Clerk si el rol cambio. Con 1000 estudiantes entrando a la
+    // vez, esto evita miles de llamadas innecesarias a la API de Clerk.
+    let rolFinal = req.userRole
+    if (req.userRole !== role) {
+      const user = await clerkClient.users.updateUser(userId, {
+        publicMetadata: { role }
+      })
+      rolFinal = user.publicMetadata.role
+    }
 
     // Si es docente, aseguramos su ficha en 'teachers' con los datos del padrón.
     if (role === 'docente') {
@@ -43,11 +49,11 @@ router.post('/update-role', requireAuth, async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Rol actualizado correctamente',
-      role: user.publicMetadata.role
+      role: rolFinal
     })
   } catch (error) {
     res.status(500).json({ message: 'Error al actualizar el rol', error: error.message })
   }
 })
 
-export default router
+export default router

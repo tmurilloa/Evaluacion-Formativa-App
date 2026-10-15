@@ -3,7 +3,18 @@ import mongoose from 'mongoose'
 const improvementPlanSchema = new mongoose.Schema({
     teacherId: {
         type: String,
-        required: true
+        // Obligatorio solo en la retroalimentacion individual
+        required: function () { return this.scope !== 'colectiva' }
+    },
+    // Destinatarios de una retroalimentacion colectiva de la direccion
+    teacherIds: {
+        type: [String],
+        default: undefined
+    },
+    scope: {
+        type: String,
+        enum: ['individual', 'colectiva'],
+        default: 'individual'
     },
     userEmail: {
         type: String,
@@ -44,5 +55,7 @@ const improvementPlanSchema = new mongoose.Schema({
         default: 'docente'
     }
 }, {timestamps: true})
+
+improvementPlanSchema.index({ teacherIds: 1 })
 
 export default mongoose.model('ImprovementPlan', improvementPlanSchema)

@@ -88,8 +88,13 @@ export default function TeacherFeedbackModal({ teacher, onClose }) {
                     feedback.map(f => (
                     <div key={f._id} className="border rounded p-3 mb-2">
                         <div className="d-flex justify-content-between align-items-center">
-                        <span className="badge bg-secondary">Periodo {f.period}</span>
-                        <small className="text-muted">{new Date(f.createdAt).toLocaleDateString('es-ES')}</small>
+                            <div className="d-flex gap-2">
+                            <span className="badge bg-secondary">Periodo {f.period}</span>
+                            {f.scope === 'colectiva'
+                                ? <span className="badge bg-info">Colectiva · {f.teacherIds?.length} docentes</span>
+                                : <span className="badge bg-light text-dark border">Individual</span>}
+                            </div>
+                            <small className="text-muted">{new Date(f.createdAt).toLocaleDateString('es-ES')}</small>
                         </div>
                         {f.comments && <p className="mt-2 mb-1">{f.comments}</p>}
                         <p className="mb-1"><strong>Meta:</strong> {f.goal}</p>

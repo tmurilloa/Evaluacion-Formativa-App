@@ -39,7 +39,7 @@ export default function ImprovementPlanModal({ teacherId, userEmail, onSaved, on
       <div className="modal-dialog modal-lg">
         <div className="modal-content">
           <div className="modal-header">
-            <h5 className="modal-title">Crear Plan de Mejora Docente</h5>
+            <h5 className="modal-title">Registrar acciones de mejoramiento</h5>
             <button type="button" className="btn-close" onClick={onClose}></button>
           </div>
 

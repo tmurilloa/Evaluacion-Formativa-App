@@ -56,7 +56,7 @@ export default function TeacherPage() {
         { label: 'Inicio', icon: 'bi-house', active: view === 'dashboard', onClick: () => setView('dashboard') },
         { label: 'Autoevaluación', icon: 'bi-pencil-square', active: view === 'eval', onClick: () => { if (!hasEvaluated) setView('eval') } },
         { label: 'Resultados', icon: 'bi-bar-chart', active: view === 'results', onClick: handleViewResults },
-        { label: 'Plan de Mejora', icon: 'bi-journal-text', active: false, onClick: () => setShowPlanModal(true) },
+        { label: 'Acciones de mejoramiento', icon: 'bi-journal-text', active: false, onClick: () => setShowPlanModal(true) },
       ]}>
         {error && <div className="alert alert-danger">{error}</div>}
 
@@ -110,15 +110,15 @@ export default function TeacherPage() {
           <div className="col-md-4 mb-3">
             <div className="card dashboard-card h-100">
               <div className="card-header role-teacher">
-                <h5 className="mb-0">Plan de Mejoramiento</h5>
+                <h5 className="mb-0">Acciones de mejoramiento</h5>
               </div>
               <div className="card-media">
-                <img src="/img/plan-mejora.svg" alt="Plan de Mejora" />
+                <img src="/img/plan-mejora.svg" alt="Acciones de mejoramiento" />
               </div>
               <div className="card-body d-flex flex-column">
-                <p className="card-text">Desarrolle y documente su plan de mejora continua basado en los resultados.</p>
+                <p className="card-text">Registre las acciones que emprenderá para mejorar su práctica a partir de sus resultados.</p>
                 <button className="btn btn-primary mt-auto" onClick={() => setShowPlanModal(true)}>
-                  Crear Plan
+                  Registrar acciones
                 </button>
               </div>
             </div>

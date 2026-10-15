@@ -1,6 +1,7 @@
 import express from 'express'
 import Teacher from '../models/Teacher.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import { inscripcionObligatoria, docentesInscritos } from '../utils/inscripcion.js'
 
 const router = express.Router()
 
@@ -17,8 +18,25 @@ router.get('/me', requireAuth, requireRole('docente'), async (req, res) => {
   }
 })
 
-// GET /api/teachers - Obtener todos los docentes
-router.get('/', requireAuth, requireRole('estudiante', 'docente', 'directivo'), async (req, res) => {
+// GET /api/teachers/mine - Docentes que el estudiante autenticado debe evaluar.
+// Con inscripcion obligatoria: solo aquellos con los que esta inscrito.
+// Sin ella (desarrollo/demo): todos los docentes, como antes.
+router.get('/mine', requireAuth, requireRole('estudiante'), async (req, res) => {
+  try {
+    if (!inscripcionObligatoria()) {
+      const teachers = await Teacher.find()
+      return res.status(200).json({ inscripcion: false, teachers })
+    }
+    const ids = await docentesInscritos(req.userEmail)
+    const teachers = ids.length ? await Teacher.find({ id: { $in: ids } }) : []
+    res.status(200).json({ inscripcion: true, teachers })
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener tus docentes', error: error.message })
+  }
+})
+
+// GET /api/teachers - Obtener todos los docentes (docentes y directivos)
+router.get('/', requireAuth, requireRole('docente', 'directivo'), async (req, res) => {
   try {
     const teachers = await Teacher.find()
     res.status(200).json(teachers)
@@ -73,4 +91,4 @@ router.patch('/:id', requireAuth, requireRole('directivo'), async (req, res) => 
   }
 })
 
-export default router
+export default router

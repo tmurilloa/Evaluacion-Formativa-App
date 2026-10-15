@@ -35,3 +35,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+# Piloto: listas de estudiantes (datos personales) y respaldos. NUNCA a git.
+Backend/piloto/
+Backend/respaldos/

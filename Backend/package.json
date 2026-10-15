@@ -8,6 +8,10 @@
     "seed": "node scripts/seed.js",
     "seed:demo": "node scripts/seed-demo.js",
     "matriculados": "node scripts/set-matriculados.js",
+    "piloto:preguntas": "node --env-file=.env.piloto scripts/seed.js",
+    "piloto:cargar": "node --env-file=.env.piloto scripts/cargar-piloto.js",
+    "piloto:verificar": "node --env-file=.env.piloto scripts/verificar-estudiante.js",
+    "piloto:respaldo": "node --env-file=.env.piloto scripts/respaldo.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -24,6 +28,7 @@
     "mongoose": "^9.5.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

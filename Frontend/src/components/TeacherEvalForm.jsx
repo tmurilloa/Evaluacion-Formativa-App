@@ -66,7 +66,7 @@ export default function TeacherEvalForm({ questions, teacherId, userEmail, onSub
           {likertQuestions.map((question) => (
             <div key={question.number} className="evaluation-item mb-3">
               <h6 className="mb-2">{question.question}</h6>
-              <div className="d-flex align-items-center">
+              <div className="likert-options">
                 {[1, 2, 3, 4, 5].map(value => (
                   <div key={value}>
                     <input
@@ -79,7 +79,7 @@ export default function TeacherEvalForm({ questions, teacherId, userEmail, onSub
                       onChange={() => handleScoreChange(question.number, value)}
                     />
                     <label
-                      className="btn btn-outline-primary rounded-circle me-2"
+                      className="btn btn-outline-primary rounded-circle"
                       htmlFor={`teacher-q-${question.number}-${value}`}
                     >
                       {value}

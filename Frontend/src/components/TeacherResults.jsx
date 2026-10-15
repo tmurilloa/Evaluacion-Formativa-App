@@ -442,7 +442,7 @@ export default function TeacherResults({ results, plans, questions, studentQuest
         {/* Planes de mejora */}
         <div className="mt-4">
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <h5><i className="bi bi-journal-text me-2"></i>Planes de Mejora</h5>
+            <h5><i className="bi bi-journal-text me-2"></i>Acciones de mejoramiento</h5>
             <button className="btn btn-sm btn-primary" onClick={onCreatePlan}>
               <i className="bi bi-plus me-1"></i>Nuevo Plan
             </button>
@@ -451,7 +451,7 @@ export default function TeacherResults({ results, plans, questions, studentQuest
           {plans.length === 0 ? (
             <div className="alert alert-info">
               <i className="bi bi-info-circle me-2"></i>
-              No hay planes de mejora registrados.
+              No hay acciones de mejoramiento registradas.
             </div>
           ) : (
             plans.map((plan, index) => (

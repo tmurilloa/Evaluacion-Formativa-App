@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { SignedIn, SignedOut, useUser, useAuth } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, useUser, useAuth, useClerk } from '@clerk/clerk-react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import api, { setAuthToken } from './api/axios.js'
+import api, { setTokenProvider } from './api/axios.js'
 import LoginPage from './pages/LoginPage.jsx'
 import StudentPage from './pages/StudentPage.jsx'
 import TeacherPage from './pages/TeacherPage.jsx'
@@ -10,20 +10,16 @@ import DirectorPage from './pages/DirectorPage.jsx'
 function AuthenticatedApp() {
   const { getToken } = useAuth()
   const { user, isLoaded } = useUser()
-  const [tokenReady, setTokenReady] = useState(false)
   const [asignandoRol, setAsignandoRol] = useState(false)
+  const [errorRol, setErrorRol] = useState('')
 
-  // Mantener el token de axios al día.
-  useEffect(() => {
-    const updateToken = async () => {
-      const token = await getToken()
-      setAuthToken(token)
-      setTokenReady(true)
-    }
-    updateToken()
-    const interval = setInterval(updateToken, 50000)
-    return () => clearInterval(interval)
-  }, [getToken])
+  const { signOut } = useClerk()
+
+  // Cada peticion a la API pide a Clerk un token vigente (ver api/axios.js).
+  // Se registra durante el render (no en un useEffect) para que ya este listo
+  // cuando las paginas hijas hagan sus primeras peticiones: los efectos de los
+  // hijos corren ANTES que los del padre.
+  setTokenProvider(getToken)
 
   // En cada ingreso sincronizamos el rol con el padrón (el backend lo deriva del correo).
   // El ref garantiza que corra una sola vez por usuario, incluso con el doble montaje de StrictMode.
@@ -36,18 +32,18 @@ function AuthenticatedApp() {
     const sincronizarRol = async () => {
       setAsignandoRol(true)
       try {
-        const token = await getToken()
-        const { data } = await api.post('/api/auth/update-role', {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        const { data } = await api.post('/api/auth/update-role', {})
         // Solo recargamos si el rol cambió respecto al que ya tenía la sesión.
         if (data?.role && data.role !== user.publicMetadata?.role) {
           await user.reload()
-          const fresco = await getToken({ skipCache: true })
-          setAuthToken(fresco)
+          // Forzar un token nuevo que ya traiga el rol actualizado;
+          // las siguientes peticiones lo toman de la cache de Clerk.
+          await getToken({ skipCache: true })
         }
       } catch (err) {
         console.log('Error sincronizando rol:', err)
+        // 403 = el backend rechazó el correo; cualquier otra cosa = problema de conexión
+        setErrorRol(err?.response?.status === 403 ? 'correo' : 'conexion')
       } finally {
         setAsignandoRol(false)
       }
@@ -55,13 +51,29 @@ function AuthenticatedApp() {
     sincronizarRol()
   }, [isLoaded, user, getToken])
 
-  if (!isLoaded || !tokenReady || asignandoRol) return <div className="container mt-5 text-center">
+  if (!isLoaded || asignandoRol) return <div className="container mt-5 text-center">
     <div className="spinner-border text-primary" role="status"></div>
     <p className="mt-2">Cargando...</p>
   </div>
 
   const role = user?.publicMetadata?.role
-  if (!role) return <div className="container mt-5"><div className="alert alert-warning">No pudimos asignar tu rol. Verifica que tu correo institucional esté registrado, o contacta al administrador.</div></div>
+  if (!role) return (
+    <div className="container mt-5" style={{ maxWidth: 520 }}>
+      <div className="alert alert-warning">
+        {errorRol === 'conexion'
+          ? <>No pudimos conectar con el servidor. Revisa tu conexión a internet e intenta de nuevo.</>
+          : <>No pudimos darte acceso. Debes entrar con tu correo institucional <strong>@unal.edu.co</strong>.</>}
+      </div>
+      {errorRol === 'conexion' && (
+        <button className="btn btn-primary me-2" onClick={() => window.location.reload()}>
+          Reintentar
+        </button>
+      )}
+      <button className="btn btn-outline-secondary" onClick={() => signOut()}>
+        Cerrar sesión e intentar con otra cuenta
+      </button>
+    </div>
+  )
 
   return (
     <Routes>

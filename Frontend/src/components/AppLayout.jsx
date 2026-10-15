@@ -5,7 +5,7 @@ export default function AppLayout({ title, roleLabel, userName, nav = [], onSign
     <div className="app-shell">
         <aside className="app-sidebar">
         <div className="sidebar-brand">
-            <i className="bi bi-mortarboard-fill" style={{ fontSize: '1.8rem' }}></i>
+            <img src="/img/escudoUnal.svg" alt="Universidad Nacional de Colombia" style={{ height: '2.4rem' }} />
             <span>Evaluación<br />Formativa</span>
         </div>
 

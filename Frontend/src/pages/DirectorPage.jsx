@@ -6,6 +6,7 @@ import AppLayout from '../components/AppLayout.jsx'
 import TeacherFeedbackModal from '../components/TeacherFeedbackModal.jsx'
 import FrequentTerms from '../components/FrequentTerms.jsx'
 import TeacherDetailModal from '../components/TeacherDetailModal.jsx'
+import GroupFeedbackSection from '../components/GroupFeedbackSection.jsx'
 
 import { COLORES, COLORES_PUNTAJE } from '../theme.js'
 import { RESPUESTAS_VISIBLES } from '../config/umbrales.js'
@@ -220,6 +221,7 @@ export default function DirectorPage() {
   const [selectedTeacher, setSelectedTeacher] = useState(null)
   const [feedbackTeacher, setFeedbackTeacher] = useState(null)
   const [detailTeacher, setDetailTeacher] = useState(null)
+  const [vista, setVista] = useState('inicio')
 
   const sortedTeachers = stats?.teachers
     ? [...stats.teachers].sort((a, b) => b.overallAverage - a.overallAverage)
@@ -277,9 +279,11 @@ export default function DirectorPage() {
       userName={user?.firstName || user?.primaryEmailAddress?.emailAddress || 'Directivo'}
       onSignOut={() => signOut()}
       nav={[
-        { label: 'Inicio', icon: 'bi-house', active: true, onClick: () => {} },
+        { label: 'Inicio', icon: 'bi-house', active: vista === 'inicio', onClick: () => setVista('inicio') },
+        { label: 'Plan de mejoramiento', icon: 'bi-people', active: vista === 'plan', onClick: () => setVista('plan') },
       ]}
     >
+      {vista === 'inicio' && (
       <div className="card">
         <div className="card-body">
           <div className="d-flex justify-content-end gap-2 mb-3">
@@ -580,7 +584,9 @@ export default function DirectorPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {vista === 'plan' && <GroupFeedbackSection teachers={stats?.teachers || []} />}
       {/* Modal de respuestas abiertas */}
       <OpenAnswersModal
         teacher={selectedTeacher}

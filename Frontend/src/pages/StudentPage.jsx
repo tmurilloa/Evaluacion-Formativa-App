@@ -5,13 +5,15 @@ import { getErrorMessage } from '../utils/errors.js'
 import AppLayout from '../components/AppLayout.jsx'
 
 const DEBOUNCE_MS = 600
+// Correo de soporte que ven los estudiantes sin cursos asignados (opcional, variable de Vercel)
+const SOPORTE = import.meta.env.VITE_CORREO_SOPORTE || ''
 
 export default function StudentPage() {
   const { user } = useUser()
   const { signOut } = useClerk()
   const userEmail = user?.primaryEmailAddress?.emailAddress
 
-  const { teachers, questions, progress, loading, error, saveAnswer, finalizeTeacher } = useStudentData(userEmail)
+  const { teachers, inscripcion, questions, progress, loading, error, saveAnswer, finalizeTeacher } = useStudentData(userEmail)
 
   const sortedQuestions = useMemo(
     () => [...questions].sort((a, b) => a.number - b.number),
@@ -29,13 +31,17 @@ export default function StudentPage() {
 
   const debounceTimers = useRef({})
 
-  // Un profesor está "seleccionado" si tiene un borrador guardado o si se agregó en esta sesión.
+  // Con inscripción (piloto): todos los docentes asignados y no enviados quedan seleccionados.
+  // Sin inscripción (demo): un profesor está "seleccionado" si tiene un borrador guardado o si se agregó en esta sesión.
   const selectedIds = useMemo(() => {
+    if (inscripcion) {
+      return teachers.filter(t => progress[t.id]?.status !== 'submitted').map(t => t.id)
+    }
     const fromProgress = teachers
       .filter(t => progress[t.id] && progress[t.id].status !== 'submitted')
       .map(t => t.id)
     return Array.from(new Set([...fromProgress, ...extraSelected]))
-  }, [teachers, progress, extraSelected])
+  }, [teachers, progress, extraSelected, inscripcion])
 
   const pendingTeachers = teachers.filter(t => selectedIds.includes(t.id))
   const availableTeachers = teachers.filter(t => progress[t.id]?.status !== 'submitted' && !selectedIds.includes(t.id))
@@ -143,12 +149,36 @@ export default function StudentPage() {
     await flushPending()
     setFinalizing(true)
     setSaveError('')
+    const teacherId = currentTeacher.id
     try {
-      await finalizeTeacher(currentTeacher.id)
-      setExtraSelected(prev => prev.filter(id => id !== currentTeacher.id))
+      try {
+        await finalizeTeacher(teacherId)
+      } catch (err) {
+        const missing = err?.response?.data?.missing
+        if (!Array.isArray(missing) || missing.length === 0) throw err
+        // El servidor no tiene algunas respuestas que sí están en pantalla (un guardado falló):
+        // se reenvían esas y se intenta finalizar una vez más.
+        const reenvios = sortedQuestions
+          .filter(q => missing.includes(q.number) && isAnswered(teacherId, q))
+          .map(q => q.questionType === 'likert'
+            ? saveAnswer(teacherId, q.number, 'likert', answers[teacherId].scores[q.number])
+            : saveAnswer(teacherId, q.number, 'abierta', answers[teacherId].openAnswers[q.number]))
+        if (reenvios.length === 0) throw err
+        await Promise.all(reenvios)
+        await finalizeTeacher(teacherId)
+      }
+      setExtraSelected(prev => prev.filter(id => id !== teacherId))
       setCurrentTeacherIndex(0)
     } catch (err) {
-      setSaveError(getErrorMessage(err, 'No se pudo finalizar la evaluación de este profesor. Revisa que respondiste todo.'))
+      const missing = err?.response?.data?.missing
+      if (Array.isArray(missing) && missing.length > 0) {
+        const posiciones = sortedQuestions
+          .map((q, i) => (missing.includes(q.number) ? i + 1 : null))
+          .filter(Boolean)
+        setSaveError(`Faltan por responder las preguntas: ${posiciones.join(', ')}.`)
+      } else {
+        setSaveError(getErrorMessage(err, 'No se pudo finalizar la evaluación de este profesor. Revisa que respondiste todo.'))
+      }
     } finally {
       setFinalizing(false)
     }
@@ -188,23 +218,32 @@ export default function StudentPage() {
         <div className="card-body">
           {saveError && <div className="alert alert-danger">{saveError}</div>}
 
-          {/* Agregar profesores */}
-          {availableTeachers.length > 0 && (
+          {/* Con inscripción: los docentes ya vienen asignados, no hay selector */}
+          {inscripcion && pendingTeachers.length > 0 && (
+            <p className="mb-2">Estos son los profesores que te corresponde evaluar:</p>
+          )}
+
+          {/* Agregar profesores (solo sin inscripción) */}
+          {((!inscripcion && availableTeachers.length > 0) || (inscripcion && pendingTeachers.length > 0)) && (
             <div className="mb-4">
-              <label className="form-label">Agrega los profesores que te corresponde evaluar este semestre:</label>
-              <div className="d-flex gap-2">
-                <select className="form-select" value={teacherToAdd} onChange={e => setTeacherToAdd(e.target.value)}>
-                  <option value="">-- Seleccione un docente --</option>
-                  {availableTeachers.map(teacher => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}{teacher.subject ? ` - ${teacher.subject}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-outline-primary flex-shrink-0" onClick={handleAddTeacher} disabled={!teacherToAdd}>
-                  Agregar
-                </button>
-              </div>
+              {!inscripcion && (
+                <>
+                  <label className="form-label">Agrega los profesores que te corresponde evaluar este semestre:</label>
+                  <div className="d-flex gap-2">
+                    <select className="form-select" value={teacherToAdd} onChange={e => setTeacherToAdd(e.target.value)}>
+                      <option value="">-- Seleccione un docente --</option>
+                      {availableTeachers.map(teacher => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name}{teacher.subject ? ` - ${teacher.subject}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" className="btn btn-outline-primary flex-shrink-0" onClick={handleAddTeacher} disabled={!teacherToAdd}>
+                      Agregar
+                    </button>
+                  </div>
+                </>
+              )}
 
               {pendingTeachers.length > 0 && (
                 <ul className="list-group mt-2">
@@ -213,7 +252,7 @@ export default function StudentPage() {
                       <button type="button" className="btn btn-link p-0 text-decoration-none text-start flex-grow-1" style={{ color: 'inherit' }} onClick={() => setCurrentTeacherIndex(i)}>
                         {teacher.name}{teacher.subject ? ` - ${teacher.subject}` : ''}
                       </button>
-                      {!progress[teacher.id] && (
+                      {!inscripcion && !progress[teacher.id] && (
                         <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleRemoveTeacher(teacher.id)}>
                           Quitar
                         </button>
@@ -225,15 +264,25 @@ export default function StudentPage() {
             </div>
           )}
 
-          {pendingTeachers.length === 0 ? (
-            <div className="alert alert-success">
-              {availableTeachers.length === 0
-                ? '¡Gracias! Ya evaluaste a todos los profesores disponibles. Tu respuesta es anónima.'
-                : 'Aún no has agregado profesores para evaluar. Usa el selector de arriba para agregar los que te correspondan este semestre.'}
+          {inscripcion && teachers.length === 0 ? (
+            <div className="alert alert-warning">
+              No encontramos cursos asociados a tu correo <strong>{userEmail}</strong>.
+              Verifica que entraste con tu correo institucional. Si es así y crees que es un error,
+              {SOPORTE ? <> escribe a <a href={`mailto:${SOPORTE}`}>{SOPORTE}</a>.</> : ' avísale a tu profesor.'}
             </div>
+          ) : pendingTeachers.length === 0 ? (
+            inscripcion || availableTeachers.length === 0 ? (
+              <div className="alert alert-success">
+                ¡Gracias! Ya evaluaste a todos tus profesores. Tus respuestas son anónimas.
+              </div>
+            ) : (
+              <div className="alert alert-info">
+                Aún no has agregado profesores para evaluar. Usa el selector de arriba para agregar los que te correspondan este semestre.
+              </div>
+            )
           ) : (
             <>
-              <div className="d-flex justify-content-between align-items-center mb-1">
+              <div className="eval-head d-flex justify-content-between align-items-center mb-1">
                 <h5 className="mb-0">Evaluando a: {currentTeacher.name}{currentTeacher.subject ? ` - ${currentTeacher.subject}` : ''}</h5>
                 <span className="text-muted">Profesor {safeIndex + 1} de {pendingTeachers.length}</span>
               </div>
@@ -252,13 +301,13 @@ export default function StudentPage() {
 
               {sortedQuestions.map((q, i) => (
                 <div key={q.number} className="evaluation-item mb-3">
-                  <div className="d-flex justify-content-between align-items-start mb-2 gap-2">
+                  <div className="question-head d-flex justify-content-between align-items-start mb-2 gap-2">
                     <span className="fw-semibold">{i + 1}. {q.question}</span>
                     <span className="badge bg-secondary flex-shrink-0">{q.category}</span>
                   </div>
 
                   {q.questionType === 'likert' ? (
-                    <div className="d-flex align-items-center flex-wrap">
+                    <div className="likert-options">
                       {[1, 2, 3, 4, 5].map(value => (
                         <div key={value}>
                           <input
@@ -270,7 +319,7 @@ export default function StudentPage() {
                             checked={answers[currentTeacher.id]?.scores?.[q.number] === value}
                             onChange={() => handleLikertChange(currentTeacher.id, q, value)}
                           />
-                          <label className="btn btn-outline-primary rounded-circle me-2" htmlFor={`q-${q.number}-${currentTeacher.id}-${value}`}>
+                          <label className="btn btn-outline-primary rounded-circle" htmlFor={`q-${q.number}-${currentTeacher.id}-${value}`}>
                             {value}
                           </label>
                         </div>
@@ -288,7 +337,7 @@ export default function StudentPage() {
                 </div>
               ))}
 
-              <div className="mt-3 d-flex gap-2 flex-wrap">
+              <div className="eval-actions mt-3 d-flex gap-2 flex-wrap">
                 <button type="button" className="btn btn-secondary" onClick={goPrevTeacher} disabled={safeIndex === 0 || finalizing}>
                   Profesor anterior
                 </button>
