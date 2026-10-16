@@ -3,6 +3,7 @@ import Teacher from '../models/Teacher.js'
 import Evaluation from '../models/Evaluation.js'
 import Question from '../models/Question.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import { separarRespuestas } from '../utils/respuestas.js'
 
 const router = express.Router()
 
@@ -120,10 +121,8 @@ router.get('/', requireAuth, requireRole('directivo'), async (req, res) => {
 
       const studentOpenAnswers = studentOpen.map(q => ({
         question: q.question,
-        answers: studentEvals
-          .map(e => e.evaluationData?.openAnswers?.get(String(q.number)))
-          .filter(a => a && a.trim())
-      })).filter(a => a.answers.length > 0)
+        ...separarRespuestas(studentEvals.map(e => e.evaluationData?.openAnswers?.get(String(q.number))))
+      })).filter(a => a.answers.length > 0 || a.sinRespuesta > 0)
 
       stats.teachers.push({
         id: teacher.id,

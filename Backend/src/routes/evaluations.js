@@ -4,6 +4,7 @@ import Question from '../models/Question.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
 import { hashEmail } from '../utils/anon.js'
 import { estaInscrito } from '../utils/inscripcion.js'
+import { SIN_RESPUESTA, estaEnBlanco } from '../utils/respuestas.js'
 const router = express.Router()
 
 
@@ -66,7 +67,14 @@ router.post('/submit', requireAuth, requireRole('docente'), async (req, res) => 
     if (!evaluationData) {
       return res.status(400).json({ message: 'Datos incompletos' })
     }
-
+    // Preguntas abiertas en blanco -> 'N/A'
+    const abiertas = await Question.find({ type: 'teacher', questionType: 'abierta' })
+    evaluationData.openAnswers = { ...(evaluationData.openAnswers || {}) }
+    for (const q of abiertas) {
+      if (estaEnBlanco(evaluationData.openAnswers[q.number])) {
+        evaluationData.openAnswers[q.number] = SIN_RESPUESTA
+      }
+    }
     const evaluation = await Evaluation.create({ teacherId, evaluationData, evaluatorKey: hashEmail(req.userEmail), userRole, status: 'submitted' })
     res.status(201).json({ message: 'Evaluación enviada correctamente', id: evaluation._id })
   } catch (error) {
@@ -142,19 +150,22 @@ router.post('/finalize', requireAuth, requireRole('estudiante'), async (req, res
     }
 
     const questions = await Question.find({ type: 'student' })
+    // Solo las preguntas de escala son obligatorias
     const missing = questions
-      .filter(q => {
-        if (q.questionType === 'likert') {
-          return !evaluation.evaluationData?.scores?.has(String(q.number))
-        }
-        return !evaluation.evaluationData?.openAnswers?.get(String(q.number))?.trim()
-      })
+      .filter(q => q.questionType === 'likert' && !evaluation.evaluationData?.scores?.has(String(q.number)))
       .map(q => q.number)
 
     if (missing.length > 0) {
       return res.status(400).json({ message: 'Faltan preguntas por responder', missing })
     }
-
+    // Preguntas abiertas en blanco -> 'N/A'
+    questions
+      .filter(q => q.questionType !== 'likert')
+      .forEach(q => {
+        if (estaEnBlanco(evaluation.evaluationData?.openAnswers?.get(String(q.number)))) {
+          evaluation.set(`evaluationData.openAnswers.${q.number}`, SIN_RESPUESTA)
+        }
+      })
     evaluation.status = 'submitted'
     await evaluation.save()
     res.status(200).json({ message: 'Evaluación enviada correctamente', id: evaluation._id })
@@ -163,4 +174,4 @@ router.post('/finalize', requireAuth, requireRole('estudiante'), async (req, res
   }
 })
 
-export default router
+export default router

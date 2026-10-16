@@ -132,8 +132,10 @@ export default function StudentPage() {
 
   const safeIndex = pendingTeachers.length ? Math.min(currentTeacherIndex, pendingTeachers.length - 1) : 0
   const currentTeacher = pendingTeachers[safeIndex]
-  const answeredCount = currentTeacher ? sortedQuestions.filter(q => isAnswered(currentTeacher.id, q)).length : 0
-  const allAnsweredForTeacher = currentTeacher && sortedQuestions.length > 0 && answeredCount === sortedQuestions.length
+  // Solo las preguntas de escala son obligatorias; las abiertas en blanco se guardan como "N/A"
+  const requiredQuestions = sortedQuestions.filter(q => q.questionType === 'likert')
+  const answeredCount = currentTeacher ? requiredQuestions.filter(q => isAnswered(currentTeacher.id, q)).length : 0
+  const allAnsweredForTeacher = currentTeacher && requiredQuestions.length > 0 && answeredCount === requiredQuestions.length
 
   const goPrevTeacher = async () => {
     await flushPending()
@@ -286,9 +288,9 @@ export default function StudentPage() {
                 <h5 className="mb-0">Evaluando a: {currentTeacher.name}{currentTeacher.subject ? ` - ${currentTeacher.subject}` : ''}</h5>
                 <span className="text-muted">Profesor {safeIndex + 1} de {pendingTeachers.length}</span>
               </div>
-              <p className="text-muted">Respondidas {answeredCount} de {sortedQuestions.length}. Tu respuesta es anónima.</p>
+              <p className="text-muted">Respondidas {answeredCount} de {requiredQuestions.length} preguntas obligatorias. Las preguntas abiertas son opcionales. Tu respuesta es anónima.</p>
               <div className="progress mb-4" style={{ height: '6px' }}>
-                <div className="progress-bar" role="progressbar" style={{ width: `${(answeredCount / sortedQuestions.length) * 100}%` }} />
+                <div className="progress-bar" role="progressbar" style={{ width: `${requiredQuestions.length ? (answeredCount / requiredQuestions.length) * 100 : 0}%` }} />
               </div>
 
               <div className="evaluation-scale mb-4">
@@ -302,7 +304,10 @@ export default function StudentPage() {
               {sortedQuestions.map((q, i) => (
                 <div key={q.number} className="evaluation-item mb-3">
                   <div className="question-head d-flex justify-content-between align-items-start mb-2 gap-2">
-                    <span className="fw-semibold">{i + 1}. {q.question}</span>
+                    <span className="fw-semibold">
+                      {i + 1}. {q.question}
+                      {q.questionType !== 'likert' && <span className="text-muted fw-normal small"> (opcional)</span>}
+                    </span>
                     <span className="badge bg-secondary flex-shrink-0">{q.category}</span>
                   </div>
 
@@ -329,7 +334,7 @@ export default function StudentPage() {
                     <textarea
                       className="form-control"
                       rows="3"
-                      placeholder="Escribe tu respuesta aquí..."
+                      placeholder="Escribe tu respuesta aquí (opcional; si la dejas en blanco se registra como N/A)"
                       value={answers[currentTeacher.id]?.openAnswers?.[q.number] || ''}
                       onChange={e => handleOpenAnswerChange(currentTeacher.id, q, e.target.value)}
                     />

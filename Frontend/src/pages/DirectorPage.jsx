@@ -72,7 +72,8 @@ function exportCSV(stats) {
         csv += `"${a.question}"\n`
         a.answers.forEach((ans, i) => {
           csv += `Respuesta ${i + 1},"${ans.replace(/"/g, '""')}"\n`
-        })
+          })
+        if (a.sinRespuesta > 0) csv += `Sin respuesta (N/A),${a.sinRespuesta}\n`
       })
     }
   })
@@ -90,7 +91,7 @@ function OpenAnswersModal({ teacher, onClose }) {
 
   const hasAnswers =
     teacher.selfOpenAnswers?.length > 0 ||
-    teacher.studentOpenAnswers?.some(q => q.answers.length > 0)
+    teacher.studentOpenAnswers?.some(q => q.answers.length > 0 || q.sinRespuesta > 0)
 
   return (
     <>
@@ -152,18 +153,18 @@ function OpenAnswersModal({ teacher, onClose }) {
 
               {/* Separador si hay ambas secciones */}
               {teacher.selfOpenAnswers?.length > 0 &&
-                teacher.studentOpenAnswers?.some(q => q.answers.length > 0) && (
+                teacher.studentOpenAnswers?.some(q => q.answers.length > 0 || q.sinRespuesta > 0) && (
                 <hr className="my-3" />
               )}
 
               {/* Respuestas de estudiantes */}
-              {teacher.studentOpenAnswers?.some(q => q.answers.length > 0) && (
+              {teacher.studentOpenAnswers?.some(q => q.answers.length > 0 || q.sinRespuesta > 0) && (
                 <div>
                   <h6 className="text-uppercase text-muted fw-semibold mb-3" style={{ fontSize: '0.75rem', letterSpacing: '0.08em' }}>
                     Respuestas de estudiantes
                   </h6>
                   {teacher.studentOpenAnswers
-                    .filter(q => q.answers.length > 0)
+                    .filter(q => q.answers.length > 0 || q.sinRespuesta > 0)
                     .map((item, i) => {
                       const total = item.answers.length
                       const shown = item.answers.slice(0, RESPUESTAS_VISIBLES)
@@ -172,6 +173,12 @@ function OpenAnswersModal({ teacher, onClose }) {
                           <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>
                             {item.question}
                           </p>
+                          {item.sinRespuesta > 0 && (
+                          <p className="text-muted mb-1" style={{ fontSize: '0.78rem' }}>
+                          <i className="bi bi-dash-circle me-1"></i>
+                          {item.sinRespuesta} {item.sinRespuesta === 1 ? 'estudiante no respondió' : 'estudiantes no respondieron'} (N/A)
+                          </p>
+                    )}
                           {total > RESPUESTAS_VISIBLES && (
                             <p className="text-muted mb-2" style={{ fontSize: '0.78rem' }}>
                               Mostrando {RESPUESTAS_VISIBLES} de {total} respuestas
@@ -259,7 +266,7 @@ export default function DirectorPage() {
 
   const hasOpenAnswers = (teacher) =>
     teacher.selfOpenAnswers?.length > 0 ||
-    teacher.studentOpenAnswers?.some(q => q.answers.length > 0)
+    teacher.studentOpenAnswers?.some(q => q.answers.length > 0 || q.sinRespuesta > 0)
 
   if (loading) {
     return (

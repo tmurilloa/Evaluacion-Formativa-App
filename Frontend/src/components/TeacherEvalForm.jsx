@@ -19,15 +19,15 @@ export default function TeacherEvalForm({ questions, teacherId, userEmail, onSub
   }
 
   const allLikertAnswered = likertQuestions.length > 0 && likertQuestions.every(q => scores[q.number])
-  const allOpenAnswered = openQuestions.every(q => openAnswers[q.number]?.trim())
-  const allAnswered = allLikertAnswered && allOpenAnswered
+  // Las preguntas abiertas son opcionales: si quedan en blanco, el servidor guarda "N/A"
+  const allAnswered = allLikertAnswered
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
     if (!allAnswered) {
-      return setError('Por favor responde todas las preguntas antes de enviar')
+      return setError('Por favor responde todas las preguntas de escala (1-5) antes de enviar')
     }
 
     setSubmitting(true)
@@ -93,14 +93,15 @@ export default function TeacherEvalForm({ questions, teacherId, userEmail, onSub
           {/* Preguntas abiertas */}
           {openQuestions.length > 0 && (
             <div className="mt-4">
-              <h5 className="mb-3">Preguntas abiertas</h5>
+              <h5 className="mb-1">Preguntas abiertas</h5>
+              <p className="text-muted small mb-3">Opcionales: si dejas alguna en blanco, se registra como N/A.</p>
               {openQuestions.map((question) => (
                 <div key={question.number} className="evaluation-item mb-3">
                   <h6 className="mb-2">{question.question}</h6>
                   <textarea
                     className="form-control"
                     rows="3"
-                    placeholder="Escribe tu respuesta aquí..."
+                    placeholder="Escribe tu respuesta aquí (opcional)"
                     value={openAnswers[question.number] || ''}
                     onChange={e => handleOpenAnswerChange(question.number, e.target.value)}
                   />

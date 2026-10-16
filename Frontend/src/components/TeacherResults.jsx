@@ -3,6 +3,7 @@ import { BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAx
 import FrequentTerms from './FrequentTerms.jsx'
 import { COLORES } from '../theme.js'
 import { RESPUESTAS_VISIBLES, BRECHA_RELEVANTE } from '../config/umbrales.js'
+import { separarRespuestas } from '../utils/respuestas.js'
 
 function processResults(results, questions, studentQuestions) {
   if (!results || !results.hasData) return null
@@ -46,10 +47,8 @@ function processResults(results, questions, studentQuestions) {
   // Respuestas abiertas - estudiantes agrupadas por pregunta
   const studentOpenAnswers = studentOpenQuestions.map(q => ({
     question: q.question,
-    answers: studentEvaluations
-      .map(e => e.evaluationData?.openAnswers?.[q.number])
-      .filter(a => a && a.trim())
-  })).filter(a => a.answers.length > 0)
+    ...separarRespuestas(studentEvaluations.map(e => e.evaluationData?.openAnswers?.[q.number]))
+  })).filter(a => a.answers.length > 0 || a.sinRespuesta > 0)
 
   return {
     selfScores,
@@ -93,6 +92,7 @@ function exportCSV(teacherName, processedData) {
         a.answers.forEach((ans, i) => {
           csv += `Respuesta ${i + 1},"${ans.replace(/"/g, '""')}"\n`
         })
+        if (a.sinRespuesta > 0) csv += `Sin respuesta (N/A),${a.sinRespuesta}\n`
         csv += '\n'
       })
     }
@@ -117,7 +117,7 @@ function getQuestionText(questions, questionId) {
 
 function OpenAnswersSection({ processedData }) {
   const hasSelf = processedData?.selfOpenAnswers?.length > 0
-  const hasStudent = processedData?.studentOpenAnswers?.some(q => q.answers.length > 0)
+  const hasStudent = processedData?.studentOpenAnswers?.some(q => q.answers.length > 0 || q.sinRespuesta > 0)
 
   if (!hasSelf && !hasStudent) return null
 
@@ -149,13 +149,19 @@ function OpenAnswersSection({ processedData }) {
             Respuestas de estudiantes
           </h6>
           {processedData.studentOpenAnswers
-            .filter(q => q.answers.length > 0)
+            .filter(q => q.answers.length > 0 || q.sinRespuesta > 0)
             .map((item, i) => {
               const total = item.answers.length
               const shown = item.answers.slice(0, RESPUESTAS_VISIBLES)
               return (
                 <div key={i} className="mb-4">
                   <p className="fw-semibold mb-1 text-dark" style={{ fontSize: '0.9rem' }}>{item.question}</p>
+                  {item.sinRespuesta > 0 && (
+                      <p className="text-muted mb-1" style={{ fontSize: '0.78rem' }}>
+                        <i className="bi bi-dash-circle me-1"></i>
+                        {item.sinRespuesta} {item.sinRespuesta === 1 ? 'estudiante no respondió' : 'estudiantes no respondieron'} (N/A)
+                      </p>
+                    )}
                   {total > RESPUESTAS_VISIBLES && (
                     <p className="text-muted mb-2" style={{ fontSize: '0.78rem' }}>
                       Mostrando {RESPUESTAS_VISIBLES} de {total} respuestas
